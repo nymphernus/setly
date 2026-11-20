@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val darkTheme by settings.darkTheme.collectAsState()
             val notificationsEnabled by settings.notificationsEnabled.collectAsState()
+            var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
             // Напоминание включается/выключается из настроек профиля.
             LaunchedEffect(notificationsEnabled) {
@@ -124,6 +125,7 @@ class MainActivity : ComponentActivity() {
                 val stats by profileVM.stats.collectAsState()
                 val lastSyncAt by syncManager.lastSyncAt.collectAsState()
                 val isSyncing by syncManager.isSyncing.collectAsState()
+                val todayWorkouts by todayVM.todayWorkouts.collectAsState()
 
                 NavHost(navController = navController, startDestination = "splash") {
                     composable("splash") {
@@ -138,6 +140,7 @@ class MainActivity : ComponentActivity() {
                     composable("home_root") {
                         MainScreen(
                             workouts = workouts,
+                            todayWorkouts = todayWorkouts,
                             stats = stats,
                             historyViewModel = historyVM,
                             isSignedIn = authManager.isSignedIn,
@@ -146,17 +149,38 @@ class MainActivity : ComponentActivity() {
                             isSyncing = isSyncing,
                             darkTheme = darkTheme,
                             notificationsEnabled = notificationsEnabled,
+                            snackbarMessage = snackbarMessage,
+                            onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
                             onOpenWorkout = { id -> navController.navigate("workout/$id") },
                             onEditWorkout = { id -> navController.navigate("edit_workout/$id") },
-                            onDeleteWorkout = { workoutVM.deleteWorkout(it.workout) },
+                            onDeleteWorkout = { item ->
+                                workoutVM.deleteWorkout(item.workout) {
+                                    snackbarMessage = "Тренировка удалена"
+                                }
+                            },
                             onToggleDarkTheme = { settings.setDarkTheme(it) },
                             onToggleNotifications = { settings.setNotificationsEnabled(it) },
                             onSignIn = {
                                 authManager.signInWithGoogle(this@MainActivity, signInRequestCode)
                             },
-                            onSync = { workoutVM.syncNow() },
-                            onSignOut = { authManager.signOut() },
+                            onSync = {
+                                if (!authManager.isSignedIn) {
+                                    snackbarMessage = "Войдите через Google для синхронизации"
+                                } else {
+                                    workoutVM.syncNow { success ->
+                                        snackbarMessage = if (success) {
+                                            "Синхронизация завершена"
+                                        } else {
+                                            "Не удалось синхронизировать данные"
+                                        }
+                                    }
+                                }
+                            },
+                            onSignOut = {
+                                authManager.signOut()
+                                snackbarMessage = "Вы вышли из аккаунта"
+                            },
                         )
                     }
                     composable(
@@ -176,6 +200,10 @@ class MainActivity : ComponentActivity() {
                             todayViewModel = todayVM,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate("edit_workout/$id") },
+                            onComplete = {
+                                snackbarMessage = "Тренировка завершена"
+                                navController.popBackStack()
+                            },
                         )
                     }
                     composable(
@@ -204,8 +232,10 @@ class MainActivity : ComponentActivity() {
                                 workoutVM.saveWorkout(
                                     id, name, period, sleepStart, sleepEnd,
                                     restMinutes, autoRest, selectedIds,
-                                )
-                                navController.popBackStack()
+                                ) { message ->
+                                    snackbarMessage = message
+                                    navController.popBackStack()
+                                }
                             },
                             onCreateExercise = { name, reps, perSet ->
                                 workoutVM.createExercise(name, reps, perSet)
@@ -232,6 +262,7 @@ class MainActivity : ComponentActivity() {
                                         editing.copy(name = name, targetReps = reps, repsPerSet = perSet),
                                     )
                                 }
+                                snackbarMessage = "Упражнение сохранено"
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() },
@@ -248,7 +279,7 @@ class MainActivity : ComponentActivity() {
         CoroutineScope(Dispatchers.Main).launch {
             runCatching { authManager.handleSignInResult(data) }
                 .onFailure { e ->
-                    Toast.makeText(this@MainActivity, "ОSError входа: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "Ошибка входа: ${e.message}", Toast.LENGTH_LONG).show()
                 }
         }
     }

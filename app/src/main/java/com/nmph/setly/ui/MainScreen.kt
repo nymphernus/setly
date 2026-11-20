@@ -14,9 +14,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,12 +29,14 @@ import androidx.navigation.compose.rememberNavController
 import com.nmph.setly.data.local.WorkoutWithExercises
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
+import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
 
 /** Оболочка с нижней навигацией: каждая вкладка — полноценный маршрут. */
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
 fun MainScreen(
     workouts: List<WorkoutWithExercises>,
+    todayWorkouts: List<TodayWorkoutItem> = emptyList(),
     stats: ProfileStats,
     historyViewModel: HistoryViewModel,
     isSignedIn: Boolean,
@@ -39,6 +45,8 @@ fun MainScreen(
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
+    snackbarMessage: String? = null,
+    onSnackbarShown: () -> Unit = {},
     onAddWorkout: () -> Unit,
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
@@ -53,6 +61,14 @@ fun MainScreen(
     val navController = rememberNavController()
     val currentRoute by navController.currentBackStackEntryAsState()
     val route = currentRoute?.destination?.route
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(snackbarMessage) {
+        if (snackbarMessage != null) {
+            snackbarHostState.showSnackbar(snackbarMessage)
+            onSnackbarShown()
+        }
+    }
 
     val items = listOf(
         Triple("home", "Тренировки", Icons.Default.Home),
@@ -63,6 +79,7 @@ fun MainScreen(
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (route == "home") {
                 FloatingActionButton(
@@ -104,9 +121,11 @@ fun MainScreen(
             composable("home") {
                 HomeScreen(
                     workouts = workouts,
+                    todayWorkouts = todayWorkouts,
                     onOpenWorkout = onOpenWorkout,
                     onEditWorkout = onEditWorkout,
                     onDeleteWorkout = onDeleteWorkout,
+                    onCreateWorkout = onAddWorkout,
                 )
             }
             composable("history") {

@@ -13,9 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -23,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.ui.viewmodel.ProfileStats
 import java.time.Instant
@@ -61,49 +66,87 @@ fun ProfileScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
             Text("Профиль", style = MaterialTheme.typography.headlineMedium)
         }
 
-        // Аккаунт
+        // Аккаунт / призыв войти
         item {
-            SectionCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            initials,
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
+            if (isSignedIn) {
+                SectionCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                initials,
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                        Column(
+                            Modifier.padding(start = 16.dp).weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                "Синхронизировано с Google",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                email ?: "Аккаунт Google",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    Column(
-                        Modifier.padding(start = 16.dp).weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            if (isSignedIn) "Синхронизировано с Google" else "Локальный режим",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            email ?: "Войдите, чтобы включить синхронизацию",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Button(
+                        onClick = onSignOut,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text("Выйти") }
                 }
-                Button(
-                    onClick = if (isSignedIn) onSignOut else onSignIn,
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    ),
                 ) {
-                    Text(if (isSignedIn) "Выйти" else "Войти через Google")
+                    Column(
+                        Modifier.fillMaxWidth().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.CloudOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            "Всё хранится только на устройстве",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            "Войдите через Google, чтобы сохранить тренировки и прогресс в облаке.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center,
+                        )
+                        Button(
+                            onClick = onSignIn,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Войти через Google") }
+                    }
                 }
             }
         }
@@ -111,7 +154,17 @@ fun ProfileScreen(
         // Статистика
         item {
             Text("Статистика", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (stats.completedWorkouts == 0 && stats.streakDays == 0 && stats.totalReps == 0) {
+                Text(
+                    "Начните отмечать подходы — здесь появится ваша статистика.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 StatCard("Тренировок", stats.completedWorkouts.toString(), Modifier.weight(1f))
                 StatCard("Серия, дней", stats.streakDays.toString(), Modifier.weight(1f))
                 StatCard("Повторений", stats.totalReps.toString(), Modifier.weight(1f))
@@ -120,7 +173,18 @@ fun ProfileScreen(
 
         // Настройки
         item {
-            Text("Настройки", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    "Настройки",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
             SectionCard {
                 SettingRow("Тёмная тема", darkTheme, onToggleDarkTheme)
                 SettingRow("Уведомления", notificationsEnabled, onToggleNotifications)
@@ -135,7 +199,7 @@ fun ProfileScreen(
                 Button(
                     onClick = onSync,
                     enabled = !isSyncing,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 ) { Text("Синхронизировать сейчас") }
             }
         }
@@ -171,7 +235,11 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                value,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
             Text(
                 label,
                 style = MaterialTheme.typography.labelMedium,

@@ -40,9 +40,11 @@ class WorkoutViewModel(
         restTimeMinutes: Int,
         autoRestTime: Boolean,
         exerciseIds: List<Int>,
+        onResult: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
             val existing = if (id != -1) workoutDao.getWorkoutById(id)?.workout else null
+            val isNew = existing == null
             val workout = WorkoutEntity(
                 id = existing?.id ?: 0,
                 name = name,
@@ -56,12 +58,16 @@ class WorkoutViewModel(
             // Сначала сохраняем локально (offline-first), затем бэкапим в облако.
             val savedId = workoutDao.saveWorkout(workout, exerciseIds)
             val savedExercises = exerciseIds.mapNotNull { exerciseDao.getExerciseById(it) }
+            onResult(if (isNew) "Тренировка создана" else "Тренировка обновлена")
             pushToCloud(workout.copy(id = savedId), savedExercises)
         }
     }
 
-    fun deleteWorkout(workout: WorkoutEntity) {
-        viewModelScope.launch { workoutDao.delete(workout) }
+    fun deleteWorkout(workout: WorkoutEntity, onResult: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            workoutDao.delete(workout)
+            onResult("Тренировка удалена")
+        }
         viewModelScope.launch(Dispatchers.IO) {
             if (syncManager.isSignedIn) {
                 runCatching { syncManager.deleteWorkoutFromCloud(workout.id) }
@@ -77,9 +83,14 @@ class WorkoutViewModel(
         }
     }
 
-    fun syncNow() {
+    fun syncNow(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (syncManager.isSignedIn) runCatching { syncManager.syncNow() }
+            val success = if (syncManager.isSignedIn) {
+                runCatching { syncManager.syncNow() }.isSuccess
+            } else {
+                false
+            }
+            withContext(Dispatchers.Main) { onResult(success) }
         }
     }
 

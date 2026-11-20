@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -35,6 +38,7 @@ fun AddEditExerciseScreen(
     val name = remember { mutableStateOf(exercise?.name.orEmpty()) }
     val reps = remember { mutableStateOf(exercise?.targetReps?.toString().orEmpty()) }
     val repsPerSet = remember { mutableStateOf(exercise?.repsPerSet?.toString() ?: "20") }
+    val scrollState = rememberScrollState()
 
     Scaffold(
         modifier = modifier,
@@ -50,8 +54,13 @@ fun AddEditExerciseScreen(
         },
     ) { innerPadding ->
         Column(
-            Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(innerPadding)
+                .padding(16.dp)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
                 value = name.value,

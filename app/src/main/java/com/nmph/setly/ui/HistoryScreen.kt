@@ -61,6 +61,15 @@ fun HistoryScreen(viewModel: HistoryViewModel, modifier: Modifier = Modifier) {
             }
         }
 
+        if (progress.isEmpty()) {
+            Text(
+                "Пока нет данных за этот месяц — отмечайте подходы, и дни закрасятся цветом прогресса.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier.fillMaxSize(),

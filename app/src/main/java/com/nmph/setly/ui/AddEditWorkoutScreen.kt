@@ -5,10 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -60,6 +61,7 @@ fun AddEditWorkoutScreen(
     val newName = remember { mutableStateOf("") }
     val newReps = remember { mutableStateOf("") }
     val newRepsPerSet = remember { mutableStateOf("20") }
+    val scrollState = rememberScrollState()
 
     Scaffold(
         modifier = modifier,
@@ -75,8 +77,13 @@ fun AddEditWorkoutScreen(
         },
     ) { innerPadding ->
         Column(
-            Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(innerPadding)
+                .padding(16.dp)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
                 value = name.value,
@@ -113,24 +120,36 @@ fun AddEditWorkoutScreen(
             }
 
             Text("Упражнения", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(Modifier.weight(1f)) {
-                items(availableExercises, key = { it.id }) { exercise ->
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = selected.value.contains(exercise.id),
-                            onCheckedChange = { checked ->
-                                selected.value = if (checked) selected.value + exercise.id else selected.value - exercise.id
-                            },
-                        )
-                        Text(
-                            "${exercise.name} — ${exercise.targetReps} раз · ${exercise.repsPerSet} в подходе",
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected.value.contains(exercise.id)) {
-                            IconButton(
-                                onClick = { selected.value = selected.value - exercise.id },
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
+            if (availableExercises.isEmpty()) {
+                Text(
+                    "Сначала добавьте упражнение ниже, затем выберите его для тренировки.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    availableExercises.forEach { exercise ->
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = selected.value.contains(exercise.id),
+                                onCheckedChange = { checked ->
+                                    selected.value = if (checked) {
+                                        selected.value + exercise.id
+                                    } else {
+                                        selected.value - exercise.id
+                                    }
+                                },
+                            )
+                            Text(
+                                "${exercise.name} — ${exercise.targetReps} раз · ${exercise.repsPerSet} в подходе",
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected.value.contains(exercise.id)) {
+                                IconButton(
+                                    onClick = { selected.value = selected.value - exercise.id },
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
+                                }
                             }
                         }
                     }

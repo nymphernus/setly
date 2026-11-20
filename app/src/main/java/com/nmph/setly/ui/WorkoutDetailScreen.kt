@@ -2,6 +2,7 @@ package com.nmph.setly.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -20,7 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.ui.components.EmptyStateView
 import com.nmph.setly.ui.components.RestTimer
 import com.nmph.setly.ui.components.SetPill
 import com.nmph.setly.ui.viewmodel.TodayExerciseItem
@@ -55,6 +61,7 @@ fun WorkoutDetailScreen(
     todayViewModel: TodayViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
+    onComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
@@ -62,7 +69,10 @@ fun WorkoutDetailScreen(
 
     var timeLeft by remember { mutableStateOf(0) }
     var timerRun by remember { mutableStateOf(0) }
+    var showCompleteDialog by remember { mutableStateOf(false) }
+
     val totalSets = todayItem?.exercises?.sumOf { it.sets.size } ?: 0
+    val completedSets = todayItem?.exercises?.sumOf { it.completedToday } ?: 0
     val totalSeconds = if (workout == null) 0 else {
         DistributionHelper.effectiveRestMinutes(workout.workout, totalSets) * 60
     }
@@ -92,6 +102,15 @@ fun WorkoutDetailScreen(
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Default.Edit, contentDescription = "Редактировать")
                     }
+                    IconButton(
+                        onClick = { showCompleteDialog = true },
+                        enabled = workout != null && todayItem != null && totalSets > 0,
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Завершить тренировку",
+                        )
+                    }
                 },
             )
         },
@@ -105,20 +124,38 @@ fun WorkoutDetailScreen(
             return@Scaffold
         }
 
+        if (showCompleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showCompleteDialog = false },
+                title = { Text("Завершить тренировку?") },
+                text = { Text("Все упражнения выполнены? Завершить тренировку?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showCompleteDialog = false
+                        todayViewModel.completeWorkout(workout.workout.id, onComplete)
+                    }) { Text("Завершить") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCompleteDialog = false }) { Text("Отмена") }
+                },
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(16.dp),
         ) {
             item {
                 Card(
+                    modifier = Modifier.fillMaxWidth().animateContentSize(),
                     shape = MaterialTheme.shapes.medium,
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(
                         Modifier.fillMaxWidth().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(workout.workout.name, style = MaterialTheme.typography.titleLarge)
                         Text(
@@ -130,6 +167,11 @@ fun WorkoutDetailScreen(
                             "Сон: ${workout.workout.sleepStart}–${workout.workout.sleepEnd}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Подходы сегодня: $completedSets / $totalSets",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
                             if (workout.workout.autoRestTime) {
@@ -154,39 +196,52 @@ fun WorkoutDetailScreen(
                 }
             }
 
-            if (todayItem == null) {
-                item {
-                    Text(
-                        "Тренировка не активна сегодня — подходы появятся в её период.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            when {
+                workout.exercises.isEmpty() -> {
+                    item {
+                        EmptyStateView(
+                            icon = Icons.Default.FitnessCenter,
+                            title = "Добавьте упражнения в эту тренировку",
+                            description = "Без упражнений нечего распределять по дням и отмечать в подходах.",
+                            actionText = "Добавить упражнение",
+                            onAction = onEdit,
+                        )
+                    }
                 }
-            } else {
-                items(todayItem.exercises.size) { position ->
-                    val exercise = todayItem.exercises[position]
-                    ExerciseSetsCard(
-                        item = exercise,
-                        onSetClick = { index, wasChecked ->
-                            todayViewModel.toggleSet(exercise.exercise.id, index)
-                            if (wasChecked) {
-                                timerRun = 0
-                                timeLeft = 0
-                            } else {
-                                timerRun++
-                            }
-                        },
-                    )
-                }
-            }
 
-            if (todayItem == null) {
-                items(workout.exercises.size) { position ->
-                    val exercise = workout.exercises[position]
-                    Text(
-                        "• ${exercise.name} — ${exercise.targetReps} раз (${exercise.repsPerSet} в подходе)",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                todayItem == null -> {
+                    item {
+                        Text(
+                            "Тренировка не активна сегодня — подходы появятся в её период.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    items(workout.exercises.size) { position ->
+                        val exercise = workout.exercises[position]
+                        Text(
+                            "• ${exercise.name} — ${exercise.targetReps} раз (${exercise.repsPerSet} в подходе)",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
+                else -> {
+                    items(todayItem.exercises.size) { position ->
+                        val exercise = todayItem.exercises[position]
+                        ExerciseSetsCard(
+                            item = exercise,
+                            onSetClick = { index, wasChecked ->
+                                todayViewModel.toggleSet(exercise.exercise.id, index)
+                                if (wasChecked) {
+                                    timerRun = 0
+                                    timeLeft = 0
+                                } else {
+                                    timerRun++
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -207,13 +262,14 @@ private fun ExerciseSetsCard(
         label = "detailExerciseBackground",
     )
     Card(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
     ) {
         Column(
             Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

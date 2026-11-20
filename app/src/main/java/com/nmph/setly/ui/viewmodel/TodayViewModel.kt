@@ -115,6 +115,31 @@ class TodayViewModel(
         }
     }
 
+    // Завершение тренировки: все подходы на сегодня отмечаются выполненными.
+    fun completeWorkout(workoutId: Int, onComplete: () -> Unit) {
+        val todayItem = todayWorkouts.value.firstOrNull { it.workout.id == workoutId } ?: return
+        val records = todayItem.exercises.map { item ->
+            ProgressEntity(
+                id = "${todayDate}_${item.exercise.id}",
+                date = todayDate,
+                exerciseId = item.exercise.id,
+                completedSets = item.sets,
+                isCompleted = true,
+            )
+        }
+        viewModelScope.launch {
+            records.forEach { progressDao.insertOrUpdate(it) }
+            if (syncManager.isSignedIn) {
+                withContext(Dispatchers.IO) {
+                    records.forEach { record ->
+                        runCatching { syncManager.pushProgressToCloud(record) }
+                    }
+                }
+            }
+            onComplete()
+        }
+    }
+
     private fun WorkoutWithExercises.isActiveOn(date: LocalDate): Boolean {
         val start = Instant.ofEpochMilli(workout.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
         return !date.isBefore(start) && !date.isAfter(start.plusDays(workout.periodDays.toLong() - 1))
