@@ -12,4 +12,5 @@ data class WorkoutEntity(
     val periodDays: Int,
     val sleepStart: String, // "HH:mm"
     val sleepEnd: String, // "HH:mm"
+    val restTimeMinutes: Int = 30, // отдых между подходами
 )

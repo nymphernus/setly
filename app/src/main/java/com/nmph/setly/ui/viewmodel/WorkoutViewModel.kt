@@ -33,6 +33,7 @@ class WorkoutViewModel(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
+        restTimeMinutes: Int,
         exerciseIds: List<Int>,
     ) {
         viewModelScope.launch {
@@ -45,6 +46,7 @@ class WorkoutViewModel(
                     periodDays = periodDays,
                     sleepStart = sleepStart,
                     sleepEnd = sleepEnd,
+                    restTimeMinutes = restTimeMinutes,
                 ),
                 exerciseIds,
             )

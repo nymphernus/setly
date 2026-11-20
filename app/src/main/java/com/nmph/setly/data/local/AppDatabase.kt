@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -112,6 +112,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Добавляем колонку с дефолтом: существующие тренировки получат отдых 30 минут.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `workouts` ADD COLUMN `restTimeMinutes` INTEGER NOT NULL DEFAULT 30",
+                )
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -120,7 +129,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "setly_database",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build().also { INSTANCE = it }
             }
         }

@@ -36,7 +36,14 @@ fun AddEditWorkoutScreen(
     workout: WorkoutEntity?,
     availableExercises: List<ExerciseEntity>,
     initialSelectedIds: Set<Int> = emptySet(),
-    onSave: (name: String, periodDays: Int, sleepStart: String, sleepEnd: String, selectedIds: List<Int>) -> Unit,
+    onSave: (
+        name: String,
+        periodDays: Int,
+        sleepStart: String,
+        sleepEnd: String,
+        restTimeMinutes: Int,
+        selectedIds: List<Int>,
+    ) -> Unit,
     onCreateExercise: (name: String, reps: Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -45,6 +52,7 @@ fun AddEditWorkoutScreen(
     val period = remember { mutableStateOf(workout?.periodDays?.toString().orEmpty()) }
     val sleepStart = remember { mutableStateOf(workout?.sleepStart ?: "21:00") }
     val sleepEnd = remember { mutableStateOf(workout?.sleepEnd ?: "08:00") }
+    val restMinutes = remember { mutableStateOf(workout?.restTimeMinutes?.toString() ?: "30") }
     val selected = remember { mutableStateOf(initialSelectedIds) }
     val newName = remember { mutableStateOf("") }
     val newReps = remember { mutableStateOf("") }
@@ -88,6 +96,8 @@ fun AddEditWorkoutScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
+
+            NumberField("Отдых между подходами (мин)", restMinutes.value) { restMinutes.value = it }
 
             Text("Упражнения", style = MaterialTheme.typography.titleMedium)
             LazyColumn(Modifier.weight(1f)) {
@@ -133,6 +143,7 @@ fun AddEditWorkoutScreen(
             }
 
             val canSave = name.value.isNotBlank() && period.value.toIntOrNull() != null &&
+                restMinutes.value.toIntOrNull() != null &&
                 isTimeValid(sleepStart.value) && isTimeValid(sleepEnd.value)
             Button(
                 onClick = {
@@ -142,6 +153,7 @@ fun AddEditWorkoutScreen(
                             period.value.toInt(),
                             sleepStart.value,
                             sleepEnd.value,
+                            restMinutes.value.toInt(),
                             selected.value.toList(),
                         )
                     }

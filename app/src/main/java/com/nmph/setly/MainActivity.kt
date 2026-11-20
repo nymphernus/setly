@@ -1,10 +1,15 @@
 package com.nmph.setly
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,16 +39,37 @@ import com.nmph.setly.ui.viewmodel.WorkoutViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private val signInRequestCode = 1001
+    // Уведомления опциональны: отказ пользователя не ломает работу приложения.
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authManager = AuthManager(this)
         // Ранняя инициализация БД: падение схемы проявится сразу, а не при первом чтении.
         val database = AppDatabase.getDatabase(this)
+
+        // Периодическое напоминание; KEEP не создаёт дубликаты при перезапуске приложения.
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "setly_workout_reminder",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<NotificationWorker>(30, TimeUnit.MINUTES).build(),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
         setContent {
             SetlyTheme {
@@ -99,8 +125,8 @@ class MainActivity : ComponentActivity() {
                             workout = editingWorkout?.workout,
                             availableExercises = exercises,
                             initialSelectedIds = initialSelected,
-                            onSave = { name, period, sleepStart, sleepEnd, selectedIds ->
-                                workoutVM.saveWorkout(id, name, period, sleepStart, sleepEnd, selectedIds)
+                            onSave = { name, period, sleepStart, sleepEnd, restMinutes, selectedIds ->
+                                workoutVM.saveWorkout(id, name, period, sleepStart, sleepEnd, restMinutes, selectedIds)
                                 navController.popBackStack()
                             },
                             onCreateExercise = { name, reps -> workoutVM.createExercise(name, reps) },

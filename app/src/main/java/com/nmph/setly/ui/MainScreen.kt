@@ -33,7 +33,7 @@ import com.nmph.setly.data.local.WorkoutWithExercises
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
 fun MainScreen(
     workouts: List<WorkoutWithExercises>,

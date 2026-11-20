@@ -17,7 +17,11 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.ui.viewmodel.TodayExerciseItem
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
+import kotlinx.coroutines.delay
 
 @Composable
 fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
@@ -55,18 +60,54 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) {
+    var timeLeft by remember { mutableStateOf(0) }
+    // Увеличивается при каждом отмеченном подходе — перезапускает отсчёт заново.
+    var timerRun by remember { mutableStateOf(0) }
+
+    LaunchedEffect(timerRun) {
+        if (timerRun == 0) return@LaunchedEffect
+        var remaining = item.workout.restTimeMinutes.coerceAtLeast(0) * 60
+        if (remaining == 0) return@LaunchedEffect
+        timeLeft = remaining
+        while (remaining > 0) {
+            delay(1_000)
+            remaining--
+            timeLeft = remaining
+        }
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
+            if (timerRun > 0) {
+                val timerText = if (timeLeft > 0) {
+                    "Отдых: %02d:%02d".format(timeLeft / 60, timeLeft % 60)
+                } else {
+                    "Отдых окончен!"
+                }
+                Text(
+                    timerText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (timeLeft > 0) MaterialTheme.colorScheme.primary else Color(0xFF2E7D32),
+                )
+            }
             item.exercises.forEach { exercise ->
-                TodayExerciseRow(exercise, viewModel)
+                TodayExerciseRow(
+                    item = exercise,
+                    viewModel = viewModel,
+                    onSetChecked = { if (item.workout.restTimeMinutes > 0) timerRun++ },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun TodayExerciseRow(item: TodayExerciseItem, viewModel: TodayViewModel) {
+private fun TodayExerciseRow(
+    item: TodayExerciseItem,
+    viewModel: TodayViewModel,
+    onSetChecked: () -> Unit,
+) {
     val done = item.sets.isNotEmpty() && item.completedSets == item.sets
     Column(
         modifier = Modifier
@@ -92,7 +133,10 @@ private fun TodayExerciseRow(item: TodayExerciseItem, viewModel: TodayViewModel)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = item.completedSets.getOrNull(index) == reps,
-                        onCheckedChange = { viewModel.toggleSet(item.exercise.id, index) },
+                        onCheckedChange = { checked ->
+                            viewModel.toggleSet(item.exercise.id, index)
+                            if (checked) onSetChecked()
+                        },
                     )
                     Text("$reps раз")
                 }
