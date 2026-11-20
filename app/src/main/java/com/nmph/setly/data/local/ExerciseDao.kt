@@ -1,0 +1,24 @@
+package com.nmph.setly.data.local
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface ExerciseDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(exercise: ExerciseEntity)
+
+    @Update
+    suspend fun update(exercise: ExerciseEntity)
+
+    @Delete
+    suspend fun delete(exercise: ExerciseEntity)
+
+    @Query("SELECT * FROM exercises ORDER BY id ASC")
+    fun getAllExercises(): Flow<List<ExerciseEntity>>
+}

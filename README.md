@@ -38,7 +38,14 @@ AGP 9.5.1 по умолчанию использует встроенный Kotl
 
 - `google-services.json` лежит в `app/` и подключается плагином `com.google.gms.google-services`.
 - SHA-1 добавлен в консоли Firebase; Google Sign-In включён в Authentication.
+- Web Client ID для `requestIdToken` хранится в `res/values/strings.xml` (`google_web_client_id`).
 - Файл `google-services.json` не удалять и не перезаписывать без согласования.
+
+## Архитектура
+
+- Offline-first: приложение работает без аккаунта, данные хранятся в Room (`data/local/AppDatabase.kt`).
+- Google Sign-In опционален и нужен только для бэкапа в Firestore (`users/{uid}`).
+- Стартовый экран — `MainScreen`; профиль открывается иконкой в TopAppBar.
 
 ## Конфигурация агента
 

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Setly</string>
+    <!-- Web Client ID из Firebase Auth (не путать с Android client_id из google-services.json). -->
+    <string name="google_web_client_id">YOUR_WEB_CLIENT_ID</string>
 </resources>
