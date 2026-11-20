@@ -9,6 +9,6 @@ data class ExerciseEntity(
     val id: Int = 0,
     val name: String,
     val targetReps: Int,
-    val periodDays: Int,
-    val sleepHours: Int,
+    val periodDays: Int = 7,
+    val sleepHours: Int = 8,
 )

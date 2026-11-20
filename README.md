@@ -45,7 +45,9 @@ AGP 9.5.1 по умолчанию использует встроенный Kotl
 
 - Offline-first: приложение работает без аккаунта, данные хранятся в Room (`data/local/AppDatabase.kt`).
 - Google Sign-In опционален и нужен только для бэкапа в Firestore (`users/{uid}`).
-- Стартовый экран — `MainScreen`; профиль открывается иконкой в TopAppBar.
+- Навигация через Compose Navigation: `main` (список) → `add_edit/{id?}` (форма) / `profile`.
+- `ExerciseViewModel` (`ui/viewmodel/`) хранит список упражнений в `StateFlow` через `stateIn`.
+- `utils/DistributionHelper.kt` — заготовка под расчёт подходов с учётом сна.
 
 ## Конфигурация агента
 

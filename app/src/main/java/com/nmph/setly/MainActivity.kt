@@ -5,34 +5,26 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.nmph.setly.data.auth.AuthManager
 import com.nmph.setly.data.local.AppDatabase
+import com.nmph.setly.ui.AddEditExerciseScreen
 import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.ProfileScreen
 import com.nmph.setly.ui.theme.SetlyTheme
+import com.nmph.setly.ui.viewmodel.ExerciseViewModel
+import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private val signInRequestCode = 1001
@@ -41,44 +33,65 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         authManager = AuthManager(this)
         // Ранняя инициализация БД: падение схемы проявится сразу, а не при первом чтении.
-        AppDatabase.getDatabase(this)
+        val database = AppDatabase.getDatabase(this)
 
         setContent {
             SetlyTheme {
-                var screen by remember { mutableStateOf(Screen.Main) }
-                var signedIn by remember { mutableStateOf(authManager.isSignedIn) }
-                var email by remember { mutableStateOf(authManager.currentUser?.email) }
+                val navController = rememberNavController()
+                val factory = ExerciseViewModelFactory(database.exerciseDao())
+                val viewModel: ExerciseViewModel = viewModel(factory = factory)
+                val exercises by viewModel.exercises.collectAsState()
 
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = { Text("Setly") },
-                            actions = {
-                                IconButton(onClick = { screen = Screen.Profile }) {
-                                    Icon(Icons.Default.Person, contentDescription = "Профиль")
-                                }
-                            },
+                NavHost(navController = navController, startDestination = "main") {
+                    composable("main") {
+                        MainScreen(
+                            exercises = exercises,
+                            onAdd = { navController.navigate("add_edit") },
+                            onEdit = { id -> navController.navigate("add_edit/$id") },
+                            onDelete = { viewModel.deleteExercise(it) },
+                            onProfile = { navController.navigate("profile") },
                         )
-                    },
-                ) { innerPadding ->
-                    Box(Modifier.fillMaxSize()) {
-                        when (screen) {
-                            Screen.Main -> MainScreen(Modifier.padding(innerPadding))
-                            Screen.Profile -> ProfileScreen(
-                                isSignedIn = signedIn,
-                                email = email,
-                                onSignIn = { authManager.signInWithGoogle(this@MainActivity, signInRequestCode) },
-                                onSync = {
-                                    Toast.makeText(this@MainActivity, "Синхронизация скоро", Toast.LENGTH_SHORT).show()
-                                },
-                                onSignOut = {
-                                    authManager.signOut()
-                                    signedIn = false
-                                    email = null
-                                },
-                                modifier = Modifier.padding(innerPadding),
-                            )
-                        }
+                    }
+                    composable(
+                        route = "add_edit/{exerciseId?}",
+                        arguments = listOf(navArgument("exerciseId") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        }),
+                    ) { backStackEntry ->
+                        val id = backStackEntry.arguments?.getInt("exerciseId") ?: -1
+                        val editing = if (id != -1) viewModel.getExerciseById(id) else null
+                        AddEditExerciseScreen(
+                            exercise = editing,
+                            onSave = { name, reps, period, sleep ->
+                                if (editing == null) {
+                                    viewModel.addExercise(name, reps, period, sleep)
+                                } else {
+                                    viewModel.updateExercise(
+                                        editing.copy(
+                                            name = name,
+                                            targetReps = reps,
+                                            periodDays = period,
+                                            sleepHours = sleep,
+                                        ),
+                                    )
+                                }
+                                navController.popBackStack()
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("profile") {
+                        ProfileScreen(
+                            isSignedIn = authManager.isSignedIn,
+                            email = authManager.currentUser?.email,
+                            onSignIn = { authManager.signInWithGoogle(this@MainActivity, signInRequestCode) },
+                            onSync = {
+                                Toast.makeText(this@MainActivity, "Синхронизация скоро", Toast.LENGTH_SHORT).show()
+                            },
+                            onSignOut = { authManager.signOut() },
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                 }
             }
@@ -90,15 +103,9 @@ class MainActivity : ComponentActivity() {
         if (requestCode != signInRequestCode) return
         CoroutineScope(Dispatchers.Main).launch {
             runCatching { authManager.handleSignInResult(data) }
-                .onSuccess {
-                    // Firebase Auth сохранил сессию; пересоздаём Activity, чтобы обновить состояние входа.
-                    recreate()
-                }
                 .onFailure { e ->
                     Toast.makeText(this@MainActivity, "Ошибка входа: ${e.message}", Toast.LENGTH_LONG).show()
                 }
         }
     }
 }
-
-private enum class Screen { Main, Profile }
