@@ -8,7 +8,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,6 +25,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -52,6 +54,8 @@ import com.nmph.setly.data.local.WorkoutWithExercises
 import com.nmph.setly.ui.components.EmptyStateView
 import com.nmph.setly.ui.components.RestTimer
 import com.nmph.setly.ui.components.SetPill
+import com.nmph.setly.ui.theme.AppCards
+import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.TodayExerciseItem
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.utils.DistributionHelper
@@ -64,6 +68,7 @@ fun WorkoutDetailScreen(
     todayViewModel: TodayViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
+    onComplete: () -> Unit,
     autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -77,6 +82,9 @@ fun WorkoutDetailScreen(
     val totalSets = todayItem?.totalSets ?: 0
     val completedSets = todayItem?.completedSets ?: 0
     val isDone = todayItem?.isDone == true
+    val targetReps = todayItem?.exercises?.sumOf { it.targetForToday } ?: 0
+    val doneReps = todayItem?.exercises?.sumOf { it.completedToday } ?: 0
+    val remainingReps = (targetReps - doneReps).coerceAtLeast(0)
     val totalSeconds = if (workout == null) 0 else {
         DistributionHelper.effectiveRestMinutes(
             workout = workout.workout,
@@ -107,7 +115,17 @@ fun WorkoutDetailScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Тренировка")
+                        Text(
+                            workout?.workout?.name ?: "Тренировка",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        if (workout != null) {
+                            Text(
+                                "Период: ${workout.workout.periodDays} дней · Сон: ${workout.workout.sleepStart} - ${workout.workout.sleepEnd}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         if (timerRun > 0 && timeLeft > 0) {
                             Text(
                                 "Отдых: %02d:%02d".format(timeLeft / 60, timeLeft % 60),
@@ -129,10 +147,47 @@ fun WorkoutDetailScreen(
                 },
             )
         },
+        bottomBar = {
+            if (workout != null) {
+                Surface(tonalElevation = 2.dp) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = AppSpacing.Block, vertical = AppSpacing.CardInner),
+                        verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                    ) {
+                        Text(
+                            "Выполнено $completedSets из $totalSets подходов. Осталось $remainingReps повторений",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(
+                            onClick = onComplete,
+                            enabled = isDone,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        ) {
+                            Text(
+                                if (isDone) "Завершить тренировку"
+                                else "Отметьте все подходы, чтобы завершить",
+                            )
+                        }
+                    }
+                }
+            }
+        },
     ) { innerPadding ->
         if (workout == null) {
             Column(
-                Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(AppSpacing.Block),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) { Text("Тренировка не найдена") }
@@ -140,43 +195,32 @@ fun WorkoutDetailScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Block),
+            contentPadding = PaddingValues(AppSpacing.Block),
         ) {
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().animateContentSize(),
-                    shape = MaterialTheme.shapes.medium,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(),
+                    shape = AppCards.Shape,
+                    elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(workout.workout.name, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Период: ${workout.workout.periodDays} дней · Упражнений: ${workout.exercises.size}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            "Выполнено $completedSets из $totalSets подходов",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            when {
-                                workout.workout.autoRestTime && !autoRestEnabled ->
-                                    "Отдых: $restMinutes мин (авто выключено в профиле)"
-                                workout.workout.autoRestTime -> "Отдых: $restMinutes мин (авто)"
-                                else -> "Отдых: ${workout.workout.restTimeMinutes} мин"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        when {
+                            workout.workout.autoRestTime && !autoRestEnabled ->
+                                "Отдых: $restMinutes мин (авто выключено в профиле)"
+                            workout.workout.autoRestTime -> "Отдых: $restMinutes мин (авто)"
+                            else -> "Отдых: ${workout.workout.restTimeMinutes} мин"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(AppSpacing.CardInner),
+                    )
                 }
             }
 
@@ -184,16 +228,19 @@ fun WorkoutDetailScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = AppCards.Shape,
+                        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         ),
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(16.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(AppSpacing.CardInner),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
                         ) {
                             Icon(
                                 Icons.Default.Check,
@@ -294,30 +341,26 @@ private fun ExerciseSetsCard(
         label = "detailExerciseBackground",
     )
     Card(
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
-        shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        shape = AppCards.Shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(AppSpacing.Block),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    item.exercise.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "${item.completedToday} / ${item.targetForToday}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Text(
-                "По ${item.exercise.repsPerSet} повторений в подходе · ${item.sets.size} подходов",
-                style = MaterialTheme.typography.bodySmall,
+                item.exercise.name,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                "Сегодня: ${item.completedToday} повторений (${item.completedSetsCount} подходов)",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (item.sets.isEmpty()) {
@@ -328,14 +371,15 @@ private fun ExerciseSetsCard(
                 )
             } else {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
                 ) {
                     item.sets.forEachIndexed { index, reps ->
                         val isChecked = index in item.completedIndexes
                         SetPill(
                             reps = reps,
                             checked = isChecked,
+                            compact = true,
                             onClick = { onSetClick(index, isChecked) },
                         )
                     }

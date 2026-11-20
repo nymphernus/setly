@@ -1,5 +1,8 @@
 package com.nmph.setly.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -52,7 +55,6 @@ fun MainScreen(
     snackbarMessage: String? = null,
     onSnackbarShown: () -> Unit = {},
     onAddWorkout: () -> Unit,
-    onAddExercise: () -> Unit,
     onEditExercise: (Int) -> Unit,
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
@@ -70,6 +72,13 @@ fun MainScreen(
     val route = currentRoute?.destination?.route
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val goHome: () -> Unit = {
+        navController.navigate("home") {
+            popUpTo("home") { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     LaunchedEffect(snackbarMessage) {
         if (snackbarMessage != null) {
             snackbarHostState.showSnackbar(snackbarMessage)
@@ -89,22 +98,14 @@ fun MainScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            when (route) {
-                "home" -> FloatingActionButton(
+            if (route == "home") {
+                FloatingActionButton(
                     onClick = onAddWorkout,
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить тренировку")
                 }
-                "exercises" -> FloatingActionButton(
-                    onClick = onAddExercise,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить упражнение")
-                }
-                else -> Unit
             }
         },
         bottomBar = {
@@ -132,9 +133,15 @@ fun MainScreen(
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            composable("home") {
+            composable(
+                "home",
+                enterTransition = { fadeIn(animationSpec = tween(180)) },
+                exitTransition = { fadeOut(animationSpec = tween(180)) },
+            ) {
                 HomeScreen(
                     workouts = workouts,
                     todayWorkouts = todayWorkouts,
@@ -142,19 +149,32 @@ fun MainScreen(
                     onEditWorkout = onEditWorkout,
                     onDeleteWorkout = onDeleteWorkout,
                     onCreateWorkout = onAddWorkout,
+                    onOpenProfile = { navController.navigate("profile") },
                 )
             }
-            composable("exercises") {
+            composable(
+                "exercises",
+                enterTransition = { fadeIn(animationSpec = tween(180)) },
+                exitTransition = { fadeOut(animationSpec = tween(180)) },
+            ) {
                 ExerciseScreen(
                     viewModel = exerciseViewModel,
-                    onAdd = onAddExercise,
+                    onBack = goHome,
                     onEdit = onEditExercise,
                 )
             }
-            composable("history") {
-                HistoryScreen(viewModel = historyViewModel)
+            composable(
+                "history",
+                enterTransition = { fadeIn(animationSpec = tween(180)) },
+                exitTransition = { fadeOut(animationSpec = tween(180)) },
+            ) {
+                HistoryScreen(viewModel = historyViewModel, onBack = goHome)
             }
-            composable("profile") {
+            composable(
+                "profile",
+                enterTransition = { fadeIn(animationSpec = tween(180)) },
+                exitTransition = { fadeOut(animationSpec = tween(180)) },
+            ) {
                 ProfileScreen(
                     isSignedIn = isSignedIn,
                     email = email,
@@ -170,6 +190,7 @@ fun MainScreen(
                     onSignIn = onSignIn,
                     onSync = onSync,
                     onSignOut = onSignOut,
+                    onBack = goHome,
                 )
             }
         }

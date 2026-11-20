@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,17 +21,23 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +48,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.WorkoutWithExercises
 import com.nmph.setly.ui.components.EmptyStateView
+import com.nmph.setly.ui.theme.AppCards
+import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     workouts: List<WorkoutWithExercises>,
@@ -51,37 +61,66 @@ fun HomeScreen(
     onEditWorkout: (Int) -> Unit,
     onDeleteWorkout: (WorkoutWithExercises) -> Unit,
     onCreateWorkout: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val pendingDelete = remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val progressByWorkout = remember(todayWorkouts) {
-        todayWorkouts.associateBy({ it.workout.id }, { todayProgress(it) })
+        todayWorkouts.associateBy({ it.workout.id }, { it })
     }
 
-    if (workouts.isEmpty()) {
-        EmptyStateView(
-            icon = Icons.Default.FitnessCenter,
-            title = "У вас пока нет тренировок",
-            description = "Создайте первую тренировку, чтобы план дней и прогресс появились здесь.",
-            actionText = "Создать первую тренировку",
-            onAction = onCreateWorkout,
-            modifier = modifier.fillMaxSize(),
-        )
-    } else {
-        LazyColumn(
-            modifier = modifier,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(16.dp),
-        ) {
-            items(workouts, key = { it.workout.id }) { workout ->
-                AnimatedVisibility(visible = true, enter = fadeIn() + expandVertically()) {
-                    WorkoutCard(
-                        item = workout,
-                        progress = progressByWorkout[workout.workout.id] ?: 0f,
-                        onOpen = { onOpenWorkout(workout.workout.id) },
-                        onEdit = { onEditWorkout(workout.workout.id) },
-                        onDelete = { pendingDelete.value = workout },
+    Scaffold(
+        modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Мои тренировки",
+                        style = MaterialTheme.typography.titleLarge,
                     )
+                },
+                actions = {
+                    IconButton(onClick = onOpenProfile) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = "Открыть профиль",
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        if (workouts.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Default.FitnessCenter,
+                title = "У вас пока нет тренировок",
+                description = "Создайте первую тренировку, чтобы план дней и прогресс появились здесь.",
+                actionText = "Создать тренировку",
+                onAction = onCreateWorkout,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.Block),
+                contentPadding = PaddingValues(AppSpacing.Block),
+            ) {
+                items(workouts, key = { it.workout.id }) { workout ->
+                    AnimatedVisibility(visible = true, enter = fadeIn() + expandVertically()) {
+                        WorkoutCard(
+                            item = workout,
+                            todayItem = progressByWorkout[workout.workout.id],
+                            onOpen = { onOpenWorkout(workout.workout.id) },
+                            onEdit = { onEditWorkout(workout.workout.id) },
+                            onDelete = { pendingDelete.value = workout },
+                        )
+                    }
                 }
             }
         }
@@ -108,77 +147,97 @@ fun HomeScreen(
 @Composable
 private fun WorkoutCard(
     item: WorkoutWithExercises,
-    progress: Float,
+    todayItem: TodayWorkoutItem?,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val completed = todayItem?.completedSets ?: 0
+    val total = todayItem?.totalSets ?: 0
+    val progress = if (total == 0) 0f else completed / total.toFloat()
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
             .clickable(onClick = onOpen),
-        shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = AppCards.Shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
-            Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.padding(AppSpacing.Block),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    item.workout.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Редактировать")
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Удалить",
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Действия")
+            BoxWithConstraints {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            item.workout.name,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Период: ${item.workout.periodDays} дней · Упражнений: ${item.exercises.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Редактировать") },
-                            onClick = { menuExpanded = false; onEdit() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Удалить") },
-                            onClick = { menuExpanded = false; onDelete() },
-                        )
+                    if (this@BoxWithConstraints.maxWidth < 360.dp) {
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Действия")
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Редактировать") },
+                                    onClick = { menuExpanded = false; onEdit() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Удалить") },
+                                    onClick = { menuExpanded = false; onDelete() },
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "Редактировать тренировку")
+                        }
+                        IconButton(onClick = onDelete) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Удалить тренировку",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }
-            Text(
-                "Период: ${item.workout.periodDays} дней · Упражнений: ${item.exercises.size}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Text(
                 "Отдых: ${restLabel(item)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Выполнено сегодня: ${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Выполнено $completed из $total подходов сегодня",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.fillMaxWidth(),
@@ -188,11 +247,6 @@ private fun WorkoutCard(
             }
         }
     }
-}
-
-private fun todayProgress(item: TodayWorkoutItem): Float {
-    if (item.totalSets == 0) return 0f
-    return item.completedSets / item.totalSets.toFloat()
 }
 
 private fun restLabel(item: WorkoutWithExercises): String = if (item.workout.autoRestTime) {

@@ -19,6 +19,21 @@ private val Green = Color(0xFF10B981)
 private val Amber = Color(0xFFF59E0B)
 private val Red = Color(0xFFEF4444)
 
+/** Акцентный фон иконок (синий Google-оттенок). */
+val IconBlue = Color(0xFF1A73E8)
+
+/** Единые отступы: 16.dp между блоками, 12.dp внутри карточек. */
+object AppSpacing {
+    val Block = 16.dp
+    val CardInner = 12.dp
+}
+
+/** Единое оформление карточек всех экранов. */
+object AppCards {
+    val Shape = RoundedCornerShape(16.dp)
+    val Elevation = 2.dp
+}
+
 private val LightColors = lightColorScheme(
     primary = Blue,
     onPrimary = Color.White,
@@ -74,8 +89,8 @@ private val DarkColors = darkColorScheme(
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
     small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(16.dp),
+    medium = AppCards.Shape,
+    large = AppCards.Shape,
     extraLarge = RoundedCornerShape(28.dp),
 )
 

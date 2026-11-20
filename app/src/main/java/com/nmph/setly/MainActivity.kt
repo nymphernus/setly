@@ -155,7 +155,6 @@ class MainActivity : ComponentActivity() {
                             snackbarMessage = snackbarMessage,
                             onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
-                            onAddExercise = { navController.navigate("exercise/-1") },
                             onEditExercise = { id -> navController.navigate("exercise/$id") },
                             onOpenWorkout = { id -> navController.navigate("workout/$id") },
                             onEditWorkout = { id -> navController.navigate("edit_workout/$id") },
@@ -206,6 +205,10 @@ class MainActivity : ComponentActivity() {
                             todayViewModel = todayVM,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate("edit_workout/$id") },
+                            onComplete = {
+                                snackbarMessage = "Тренировка завершена"
+                                navController.popBackStack()
+                            },
                             autoRestEnabled = autoRestEnabled,
                         )
                     }

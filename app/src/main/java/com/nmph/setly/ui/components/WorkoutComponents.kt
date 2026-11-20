@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nmph.setly.ui.theme.AppCards
+import com.nmph.setly.ui.theme.AppSpacing
+import com.nmph.setly.ui.theme.IconBlue
 
 /** Универсальное пустое состояние с иконкой, пояснением и действием. */
 @Composable
@@ -43,16 +45,26 @@ fun EmptyStateView(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.Block),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            modifier = Modifier.size(56.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(IconBlue),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = Color.White,
+            )
+        }
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
@@ -65,7 +77,12 @@ fun EmptyStateView(
             textAlign = TextAlign.Center,
         )
         if (actionText != null && onAction != null) {
-            Button(onClick = onAction, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Button(
+                onClick = onAction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            ) {
                 Text(actionText)
             }
         }
@@ -78,6 +95,7 @@ fun SetPill(
     reps: Int,
     checked: Boolean,
     onClick: () -> Unit,
+    compact: Boolean = false,
 ) {
     val background by animateColorAsState(
         targetValue = if (checked) MaterialTheme.colorScheme.primary
@@ -96,7 +114,7 @@ fun SetPill(
             .clip(RoundedCornerShape(50))
             .background(background)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -117,7 +135,11 @@ fun SetPill(
                 )
             }
         }
-        Text("$reps раз", style = MaterialTheme.typography.labelLarge, color = contentColor)
+        Text(
+            if (compact) reps.toString() else "$reps раз",
+            style = MaterialTheme.typography.labelLarge,
+            color = contentColor,
+        )
     }
 }
 
@@ -133,19 +155,19 @@ fun RestTimer(
             .fillMaxWidth()
             .background(
                 MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.shapes.medium,
+                AppCards.Shape,
             )
-            .padding(vertical = 16.dp),
+            .padding(vertical = AppSpacing.Block),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
     ) {
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(
                 progress = { if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds else 0f },
-                modifier = Modifier.size(160.dp),
+                modifier = Modifier.size(200.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeWidth = 8.dp,
+                strokeWidth = 10.dp,
             )
             Text(
                 if (timeLeft > 0) "%02d:%02d".format(timeLeft / 60, timeLeft % 60) else "0:00",
