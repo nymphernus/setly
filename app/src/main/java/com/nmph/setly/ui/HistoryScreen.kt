@@ -65,7 +65,13 @@ fun HistoryScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("История", style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Text(
+                        "История",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -93,7 +99,11 @@ fun HistoryScreen(
                 IconButton(onClick = { viewModel.prevMonth() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Предыдущий месяц")
                 }
-                Text(monthTitle, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    monthTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
                 IconButton(onClick = { viewModel.nextMonth() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Следующий месяц")
                 }

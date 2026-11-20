@@ -32,7 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
-import com.nmph.setly.ui.theme.IconBlue
+import com.nmph.setly.ui.theme.IconAccent
 
 /** Универсальное пустое состояние с иконкой, пояснением и действием. */
 @Composable
@@ -55,7 +55,7 @@ fun EmptyStateView(
             modifier = Modifier
                 .size(72.dp)
                 .clip(CircleShape)
-                .background(IconBlue),
+                .background(IconAccent),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -98,13 +98,13 @@ fun SetPill(
     compact: Boolean = false,
 ) {
     val background by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.primary
+        targetValue = if (checked) MaterialTheme.colorScheme.secondary
         else MaterialTheme.colorScheme.surfaceVariant,
         animationSpec = tween(200),
         label = "setPillBackground",
     )
     val contentColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.onPrimary
+        targetValue = if (checked) MaterialTheme.colorScheme.onSecondary
         else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = tween(200),
         label = "setPillContent",
@@ -154,7 +154,7 @@ fun RestTimer(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.secondaryContainer,
                 AppCards.Shape,
             )
             .padding(vertical = AppSpacing.Block),
@@ -165,20 +165,20 @@ fun RestTimer(
             CircularProgressIndicator(
                 progress = { if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds else 0f },
                 modifier = Modifier.size(200.dp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.secondary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeWidth = 10.dp,
             )
             Text(
                 if (timeLeft > 0) "%02d:%02d".format(timeLeft / 60, timeLeft % 60) else "0:00",
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         }
         Text(
             if (timeLeft > 0) "Отдых" else "Отдых окончен!",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
 }

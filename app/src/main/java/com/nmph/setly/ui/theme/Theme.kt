@@ -1,6 +1,5 @@
 package com.nmph.setly.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -14,13 +13,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Blue = Color(0xFF3B82F6)
-private val Green = Color(0xFF10B981)
-private val Amber = Color(0xFFF59E0B)
-private val Red = Color(0xFFEF4444)
+/** Палитра «Тёплый песок и Терракота». */
+private val Terracotta = Color(0xFFE07A5F)
+private val DarkTerracotta = Color(0xFFC8553D)
+private val Sage = Color(0xFF81B29A)
+private val Ink = Color(0xFF3D405B)
+private val InkLight = Color(0xFFB8BAD0) // осветлённые чернила для читаемости в тёмной теме
+private val Coffee = Color(0xFF2B2522)
+private val Sand = Color(0xFFFDFBF7)
+private val SandSurface = Color(0xFFF4F1EA)
 
-/** Акцентный фон иконок (синий Google-оттенок). */
-val IconBlue = Color(0xFF1A73E8)
+/** Акцент фона аватаров и иконок в новой палитре. */
+val IconAccent = Terracotta
 
 /** Единые отступы: 16.dp между блоками, 12.dp внутри карточек. */
 object AppSpacing {
@@ -35,55 +39,55 @@ object AppCards {
 }
 
 private val LightColors = lightColorScheme(
-    primary = Blue,
+    primary = Terracotta,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDBEAFE),
-    onPrimaryContainer = Color(0xFF1E3A8A),
-    secondary = Green,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD1FAE5),
-    onSecondaryContainer = Color(0xFF065F46),
-    tertiary = Amber,
-    onTertiary = Color(0xFF1F2937),
-    tertiaryContainer = Color(0xFFFEF3C7),
-    onTertiaryContainer = Color(0xFF92400E),
-    error = Red,
+    primaryContainer = Color(0xFFF4D9D0),
+    onPrimaryContainer = Color(0xFF7A2E1C),
+    secondary = Sage,
+    onSecondary = Coffee,
+    secondaryContainer = Color(0xFFDDEBE3),
+    onSecondaryContainer = Color(0xFF25483B),
+    tertiary = Ink,
+    onTertiary = Sand,
+    tertiaryContainer = Color(0xFFE8E7EF),
+    onTertiaryContainer = Ink,
+    error = DarkTerracotta,
     onError = Color.White,
-    errorContainer = Color(0xFFFEE2E2),
-    onErrorContainer = Color(0xFF991B1B),
-    background = Color(0xFFF8FAFC),
-    onBackground = Color(0xFF0F172A),
-    surface = Color.White,
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFE2E8F0),
-    onSurfaceVariant = Color(0xFF475569),
-    outline = Color(0xFF94A3B8),
+    errorContainer = Color(0xFFF6DDD7),
+    onErrorContainer = Color(0xFF7A2E1C),
+    background = Sand,
+    onBackground = Coffee,
+    surface = SandSurface,
+    onSurface = Coffee,
+    surfaceVariant = Color(0xFFE9E3D8),
+    onSurfaceVariant = Color(0xFF6B625A),
+    outline = Color(0xFFB9AFA2),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF60A5FA),
-    onPrimary = Color(0xFF0F172A),
-    primaryContainer = Color(0xFF1E3A8A),
-    onPrimaryContainer = Color(0xFFDBEAFE),
-    secondary = Color(0xFF34D399),
-    onSecondary = Color(0xFF052E24),
-    secondaryContainer = Color(0xFF065F46),
-    onSecondaryContainer = Color(0xFFD1FAE5),
-    tertiary = Color(0xFFFBBF24),
-    onTertiary = Color(0xFF1F2937),
-    tertiaryContainer = Color(0xFF92400E),
-    onTertiaryContainer = Color(0xFFFEF3C7),
-    error = Color(0xFFF87171),
-    onError = Color(0xFF450A0A),
-    errorContainer = Color(0xFF991B1B),
-    onErrorContainer = Color(0xFFFEE2E2),
-    background = Color(0xFF0B1120),
-    onBackground = Color(0xFFE2E8F0),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFE2E8F0),
-    surfaceVariant = Color(0xFF1E293B),
-    onSurfaceVariant = Color(0xFFCBD5E1),
-    outline = Color(0xFF64748B),
+    primary = Terracotta,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF7A3B2B),
+    onPrimaryContainer = Sand,
+    secondary = Sage,
+    onSecondary = Coffee,
+    secondaryContainer = Color(0xFF3F5C4E),
+    onSecondaryContainer = Sand,
+    tertiary = InkLight,
+    onTertiary = Coffee,
+    tertiaryContainer = Color(0xFF3D405B),
+    onTertiaryContainer = Sand,
+    error = DarkTerracotta,
+    onError = Color.White,
+    errorContainer = Color(0xFF7A2E1C),
+    onErrorContainer = Sand,
+    background = Coffee,
+    onBackground = Sand,
+    surface = Color(0xFF3D3835),
+    onSurface = Sand,
+    surfaceVariant = Color(0xFF4A4340),
+    onSurfaceVariant = Color(0xFFD9D0C7),
+    outline = Color(0xFF6F655E),
 )
 
 private val AppShapes = Shapes(
@@ -110,10 +114,10 @@ private val AppTypography = Typography().copy(
 
 @Composable
 fun SetlyTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Приложение по умолчанию открывается в светлой теме «Тёплый песок».
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // Цветовая схема выбирается системной темой до появления пользовательских настроек.
     val colors = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
         colorScheme = colors,

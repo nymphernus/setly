@@ -71,7 +71,13 @@ fun ExerciseScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Упражнения", style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Text(
+                        "Упражнения",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -236,6 +242,7 @@ private fun ExerciseCard(
                 Text(
                     exercise.name,
                     style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
                 Text(
                     "Подход по ${exercise.repsPerSet} раз",

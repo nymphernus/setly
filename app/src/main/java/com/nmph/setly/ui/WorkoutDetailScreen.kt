@@ -118,6 +118,7 @@ fun WorkoutDetailScreen(
                         Text(
                             workout?.workout?.name ?: "Тренировка",
                             style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                         if (workout != null) {
                             Text(
@@ -130,7 +131,7 @@ fun WorkoutDetailScreen(
                             Text(
                                 "Отдых: %02d:%02d".format(timeLeft / 60, timeLeft % 60),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.secondary,
                             )
                         }
                     }
@@ -166,8 +167,8 @@ fun WorkoutDetailScreen(
                             enabled = isDone,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
                                 disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                                 disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
@@ -357,6 +358,7 @@ private fun ExerciseSetsCard(
             Text(
                 item.exercise.name,
                 style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.tertiary,
             )
             Text(
                 "Сегодня: ${item.completedToday} повторений (${item.completedSetsCount} подходов)",

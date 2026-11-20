@@ -45,7 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
-import com.nmph.setly.ui.theme.IconBlue
+import com.nmph.setly.ui.theme.IconAccent
 import com.nmph.setly.ui.viewmodel.ProfileStats
 import java.time.Instant
 import java.time.ZoneId
@@ -88,7 +88,13 @@ fun ProfileScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Профиль", style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Text(
+                        "Профиль",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -116,7 +122,7 @@ fun ProfileScreen(
                                 modifier = Modifier
                                     .size(64.dp)
                                     .clip(CircleShape)
-                                    .background(IconBlue),
+                                    .background(IconAccent),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
@@ -165,7 +171,7 @@ fun ProfileScreen(
                                 modifier = Modifier
                                     .size(64.dp)
                                     .clip(CircleShape)
-                                    .background(IconBlue),
+                                    .background(IconAccent),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
@@ -198,7 +204,11 @@ fun ProfileScreen(
 
             // Статистика
             item {
-                Text("Статистика", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Статистика",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
                 if (stats.completedWorkouts == 0 && stats.streakDays == 0 && stats.totalSets == 0) {
                     Text(
                         "Начните отмечать подходы — здесь появится ваша статистика.",
@@ -237,11 +247,12 @@ fun ProfileScreen(
                     Icon(
                         Icons.Default.Settings,
                         contentDescription = null,
-                        tint = IconBlue,
+                        tint = IconAccent,
                     )
                     Text(
                         "Настройки",
                         style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(start = AppSpacing.CardInner),
                     )
                 }
@@ -258,7 +269,11 @@ fun ProfileScreen(
 
             // Синхронизация
             item {
-                Text("Синхронизация", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Синхронизация",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
                 SectionCard {
                     Text(syncText, style = MaterialTheme.typography.bodyMedium)
                     Button(
@@ -337,7 +352,7 @@ private fun StatCard(
                 icon,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = IconBlue,
+                tint = IconAccent,
             )
             Text(
                 value,

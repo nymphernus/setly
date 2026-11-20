@@ -1,7 +1,6 @@
 package com.nmph.setly.data.settings
 
 import android.content.Context
-import android.content.res.Configuration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -9,14 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 class AppSettings(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val systemDark = when (
-        context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-    ) {
-        Configuration.UI_MODE_NIGHT_YES -> true
-        else -> false
-    }
-
-    private val _darkTheme = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, systemDark))
+    // Новая фирменная палитра по умолчанию светлая; тёмная включается только вручную.
+    private val _darkTheme = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, false))
     val darkTheme: StateFlow<Boolean> = _darkTheme
 
     private val _notificationsEnabled = MutableStateFlow(

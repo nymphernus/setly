@@ -79,6 +79,7 @@ fun HomeScreen(
                     Text(
                         "Мои тренировки",
                         style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 },
                 actions = {
@@ -176,6 +177,7 @@ private fun WorkoutCard(
                         Text(
                             item.workout.name,
                             style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                         Text(
                             "Период: ${item.workout.periodDays} дней · Упражнений: ${item.exercises.size}",
@@ -235,13 +237,13 @@ private fun WorkoutCard(
                     Text(
                         "${(progress * 100).toInt()}%",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                 }
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.secondary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }

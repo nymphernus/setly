@@ -136,7 +136,7 @@ private fun TodayExerciseRow(
 ) {
     val done = item.isDone
     val rowColor by animateColorAsState(
-        targetValue = if (done) MaterialTheme.colorScheme.primaryContainer
+        targetValue = if (done) MaterialTheme.colorScheme.secondaryContainer
         else MaterialTheme.colorScheme.surface,
         animationSpec = tween(250),
         label = "exerciseRowColor",
