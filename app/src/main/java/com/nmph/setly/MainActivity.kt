@@ -25,6 +25,8 @@ import com.nmph.setly.ui.ProfileScreen
 import com.nmph.setly.ui.theme.SetlyTheme
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
+import com.nmph.setly.ui.viewmodel.HistoryViewModel
+import com.nmph.setly.ui.viewmodel.HistoryViewModelFactory
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.TodayViewModelFactory
 import com.nmph.setly.ui.viewmodel.WorkoutViewModel
@@ -57,6 +59,9 @@ class MainActivity : ComponentActivity() {
                         database.workoutDao(), database.exerciseDao(), database.progressDao(),
                     ),
                 )
+                val historyVM: HistoryViewModel = viewModel(
+                    factory = HistoryViewModelFactory(database.workoutDao(), database.progressDao()),
+                )
                 val workouts by workoutVM.workouts.collectAsState()
                 val exercises by exerciseVM.exercises.collectAsState()
 
@@ -65,6 +70,7 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             workouts = workouts,
                             todayViewModel = todayVM,
+                            historyViewModel = historyVM,
                             onAddWorkout = { navController.navigate("workout/-1") },
                             onEditWorkout = { id -> navController.navigate("workout/$id") },
                             onDeleteWorkout = { workoutVM.deleteWorkout(it.workout) },

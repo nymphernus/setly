@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +38,7 @@ import com.nmph.setly.ui.viewmodel.TodayViewModel
 fun MainScreen(
     workouts: List<WorkoutWithExercises>,
     todayViewModel: TodayViewModel,
+    historyViewModel: HistoryViewModel,
     onAddWorkout: () -> Unit,
     onEditWorkout: (Int) -> Unit,
     onDeleteWorkout: (WorkoutWithExercises) -> Unit,
@@ -75,10 +77,16 @@ fun MainScreen(
                     onClick = { selectedTab.value = 1 },
                     text = { Text("Все тренировки") },
                 )
+                Tab(
+                    selected = selectedTab.value == 2,
+                    onClick = { selectedTab.value = 2 },
+                    text = { Text("История") },
+                )
             }
             when (selectedTab.value) {
                 0 -> TodayScreen(viewModel = todayViewModel)
                 1 -> WorkoutList(workouts, onEditWorkout, onDeleteWorkout)
+                2 -> HistoryScreen(viewModel = historyViewModel)
             }
         }
     }
