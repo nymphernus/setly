@@ -6,16 +6,18 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.nmph.setly.data.local.AppDatabase
 import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.data.local.ProgressEntity
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseCrossRef
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
+import java.time.LocalDate
 
 /**
  * Offline-first синхронизация: Room остаётся источником данных, Firestore — бэкап.
- * Путь: users/{uid}/workouts/{workoutId}/exercises/{exerciseId}.
+ * Пути: users/{uid}/workouts/{workoutId}/exercises/{exerciseId} и users/{uid}/progress/{date_exerciseId}.
  */
 class SyncManager(
     context: Context,
@@ -109,11 +111,64 @@ class SyncManager(
         markSynced()
     }
 
+    /** ID документа — тот же, что в Room: "YYYY-MM-DD_<exerciseId>". */
+    suspend fun pushProgressToCloud(progress: ProgressEntity) {
+        val uid = currentUid() ?: return
+        val ref = progressRef(uid, progress.id)
+        val remote = ref.get().await()
+        val remoteSets = (remote.data?.get("completedSets") as? List<*>)?.size ?: 0
+        // Не понижаем облако: при конфликте побеждает большее число выполненных подходов.
+        if (remote.exists() && remoteSets > progress.completedSets.size) return
+
+        ref.set(
+            mapOf(
+                "date" to progress.date,
+                "exerciseId" to progress.exerciseId,
+                "completedSets" to progress.completedSets,
+                "isCompleted" to progress.isCompleted,
+            ),
+            SetOptions.merge(),
+        ).await()
+        markSynced()
+    }
+
+    suspend fun pullProgressFromCloud(startDate: String, endDate: String) {
+        val uid = currentUid() ?: return
+        val snapshot = progressCollection(uid)
+            .whereGreaterThanOrEqualTo("date", startDate)
+            .whereLessThanOrEqualTo("date", endDate)
+            .get()
+            .await()
+
+        for (doc in snapshot.documents) {
+            val data = doc.data ?: continue
+            val remote = toProgress(doc.id, data) ?: continue
+            val local = database.progressDao().getProgressById(remote.id)
+            // При равном числе подходов оставляем локальную запись.
+            if (local != null && local.completedSets.size >= remote.completedSets.size) continue
+            database.progressDao().insertOrUpdate(remote)
+        }
+        markSynced()
+    }
+
+    suspend fun pullProgressForCurrentMonth() {
+        val now = LocalDate.now()
+        pullProgressFromCloud(
+            now.withDayOfMonth(1).toString(),
+            now.withDayOfMonth(now.lengthOfMonth()).toString(),
+        )
+    }
+
+    suspend fun pushAllProgressToCloud() {
+        database.progressDao().getAllProgress().forEach { pushProgressToCloud(it) }
+    }
+
     suspend fun pushAllToCloud() {
         val localWorkouts = database.workoutDao().getAllWorkouts().first()
         localWorkouts.forEach { workout ->
             pushWorkoutsToCloud(workout.workout, workout.exercises)
         }
+        pushAllProgressToCloud()
     }
 
     suspend fun deleteWorkoutFromCloud(workoutId: Int) {
@@ -131,6 +186,7 @@ class SyncManager(
         _isSyncing.value = true
         try {
             pullFromCloud()
+            pullProgressForCurrentMonth()
             pushAllToCloud()
         } finally {
             _isSyncing.value = false
@@ -138,6 +194,24 @@ class SyncManager(
     }
 
     private fun users() = firestore.collection("users")
+
+    private fun progressCollection(uid: String) = users().document(uid).collection("progress")
+
+    private fun progressRef(uid: String, id: String) = progressCollection(uid).document(id)
+
+    private fun toProgress(id: String, data: Map<String, Any>): ProgressEntity? {
+        val date = data["date"] as? String ?: return null
+        val exerciseId = (data["exerciseId"] as? Number)?.toInt() ?: return null
+        val completedSets = (data["completedSets"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
+            ?: emptyList()
+        return ProgressEntity(
+            id = id,
+            date = date,
+            exerciseId = exerciseId,
+            completedSets = completedSets,
+            isCompleted = data["isCompleted"] as? Boolean ?: completedSets.isNotEmpty(),
+        )
+    }
 
     private fun currentUid(): String? = auth.currentUser?.uid
 

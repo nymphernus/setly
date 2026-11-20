@@ -6,13 +6,17 @@ import androidx.lifecycle.viewModelScope
 import com.nmph.setly.data.local.ProgressDao
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.utils.DistributionHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -23,9 +27,28 @@ import java.time.format.DateTimeFormatter
 class HistoryViewModel(
     private val workoutDao: WorkoutDao,
     private val progressDao: ProgressDao,
+    private val syncManager: SyncManager,
 ) : ViewModel() {
     private val _month = kotlinx.coroutines.flow.MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = _month
+
+    init {
+        // Первое значение эмитируется сразу, дальше — при каждом переключении месяца.
+        viewModelScope.launch {
+            _month.collect { yearMonth ->
+                if (syncManager.isSignedIn) {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            syncManager.pullProgressFromCloud(
+                                yearMonth.atDay(1).format(DateTimeFormatter.ISO_LOCAL_DATE),
+                                yearMonth.atEndOfMonth().format(DateTimeFormatter.ISO_LOCAL_DATE),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     val dayProgress: StateFlow<Map<LocalDate, Float>> = _month
         .flatMapLatest { yearMonth ->
@@ -83,12 +106,13 @@ class HistoryViewModel(
 class HistoryViewModelFactory(
     private val workoutDao: WorkoutDao,
     private val progressDao: ProgressDao,
+    private val syncManager: SyncManager,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HistoryViewModel::class.java)) {
-            return HistoryViewModel(workoutDao, progressDao) as T
+            return HistoryViewModel(workoutDao, progressDao, syncManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }

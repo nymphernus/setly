@@ -42,6 +42,7 @@ class AuthManager(context: Context, private val syncManager: SyncManager? = null
                 .await()
             // Подтягиваем данные с других устройств сразу после входа.
             runCatching { syncManager?.pullFromCloud() }
+            runCatching { syncManager?.pullProgressForCurrentMonth() }
         }
     }
 

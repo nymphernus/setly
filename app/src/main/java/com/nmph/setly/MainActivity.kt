@@ -88,11 +88,13 @@ class MainActivity : ComponentActivity() {
                 )
                 val todayVM: TodayViewModel = viewModel(
                     factory = TodayViewModelFactory(
-                        database.workoutDao(), database.exerciseDao(), database.progressDao(),
+                        database.workoutDao(), database.exerciseDao(), database.progressDao(), syncManager,
                     ),
                 )
                 val historyVM: HistoryViewModel = viewModel(
-                    factory = HistoryViewModelFactory(database.workoutDao(), database.progressDao()),
+                    factory = HistoryViewModelFactory(
+                        database.workoutDao(), database.progressDao(), syncManager,
+                    ),
                 )
                 val workouts by workoutVM.workouts.collectAsState()
                 val exercises by exerciseVM.exercises.collectAsState()

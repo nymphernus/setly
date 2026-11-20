@@ -10,12 +10,15 @@ import com.nmph.setly.data.local.ProgressEntity
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.utils.DistributionHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -39,6 +42,7 @@ class TodayViewModel(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
     private val progressDao: ProgressDao,
+    private val syncManager: SyncManager,
 ) : ViewModel() {
     private val today: LocalDate = LocalDate.now()
     private val todayDate: String = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -90,16 +94,21 @@ class TodayViewModel(
             }.toList()
         }
 
+        val updatedProgress = ProgressEntity(
+            id = "${todayDate}_$exerciseId",
+            date = todayDate,
+            exerciseId = exerciseId,
+            completedSets = updated,
+            isCompleted = updated == item.sets,
+        )
         viewModelScope.launch {
-            progressDao.insertOrUpdate(
-                ProgressEntity(
-                    id = "${todayDate}_$exerciseId",
-                    date = todayDate,
-                    exerciseId = exerciseId,
-                    completedSets = updated,
-                    isCompleted = updated == item.sets,
-                ),
-            )
+            // Сначала Room, затем бэкап в облако в фоновом потоке.
+            progressDao.insertOrUpdate(updatedProgress)
+            if (syncManager.isSignedIn) {
+                withContext(Dispatchers.IO) {
+                    runCatching { syncManager.pushProgressToCloud(updatedProgress) }
+                }
+            }
         }
     }
 
@@ -113,11 +122,12 @@ class TodayViewModelFactory(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
     private val progressDao: ProgressDao,
+    private val syncManager: SyncManager,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TodayViewModel::class.java)) {
-            return TodayViewModel(workoutDao, exerciseDao, progressDao) as T
+            return TodayViewModel(workoutDao, exerciseDao, progressDao, syncManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
