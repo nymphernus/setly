@@ -47,10 +47,13 @@ class ProfileViewModel(
 
     val darkTheme: StateFlow<Boolean> = settings.darkTheme
     val notificationsEnabled: StateFlow<Boolean> = settings.notificationsEnabled
+    val autoRestEnabled: StateFlow<Boolean> = settings.autoRestEnabled
 
     fun setDarkTheme(enabled: Boolean) = settings.setDarkTheme(enabled)
 
     fun setNotificationsEnabled(enabled: Boolean) = settings.setNotificationsEnabled(enabled)
+
+    fun setAutoRestEnabled(enabled: Boolean) = settings.setAutoRestEnabled(enabled)
 }
 
 class ProfileViewModelFactory(

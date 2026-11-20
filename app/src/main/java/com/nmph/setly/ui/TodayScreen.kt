@@ -102,7 +102,7 @@ private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) 
             Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
 
             AnimatedVisibility(
-                visible = timerRun > 0 && totalSeconds > 0,
+                visible = timerRun > 0 && timeLeft > 0 && totalSeconds > 0,
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically(),
             ) {
@@ -173,13 +173,13 @@ private fun TodayExerciseRow(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item.sets.forEachIndexed { index, reps ->
+                val isChecked = index < item.completedSets.size
                 SetPill(
                     reps = reps,
-                    checked = item.completedSets.getOrNull(index) == reps,
+                    checked = isChecked,
                     onClick = {
-                        val wasChecked = item.completedSets.getOrNull(index) == reps
                         viewModel.toggleSet(item.exercise.id, index)
-                        onSetChecked(wasChecked)
+                        onSetChecked(isChecked)
                     },
                 )
             }

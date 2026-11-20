@@ -56,9 +56,29 @@ object DistributionHelper {
     }
 
     // Авто-отдых: 24 часа делим на число подходов за день (300/20 = 15 → 96 минут).
-    fun effectiveRestMinutes(workout: WorkoutEntity, totalSetsPerDay: Int): Int {
-        if (!workout.autoRestTime || totalSetsPerDay <= 0) return workout.restTimeMinutes
+    // autoRestEnabled — глобальная настройка из профиля; она может отключить авто-расчёт везде.
+    fun effectiveRestMinutes(
+        workout: WorkoutEntity,
+        totalSetsPerDay: Int,
+        autoRestEnabled: Boolean = true,
+    ): Int {
+        if (!workout.autoRestTime || !autoRestEnabled) return workout.restTimeMinutes
+        if (totalSetsPerDay <= 0) return 30
         return (24 * 60) / totalSetsPerDay
+    }
+
+    // Подходы для упражнения: 50 / 20 → [20, 20, 10].
+    fun getSetsForExercise(
+        exercise: ExerciseEntity,
+        targetRepsForToday: Int,
+        repsPerSet: Int,
+    ): List<Int> {
+        val safeRepsPerSet = when {
+            repsPerSet > 0 -> repsPerSet
+            exercise.repsPerSet > 0 -> exercise.repsPerSet
+            else -> DEFAULT_REPS_PER_SET
+        }
+        return splitIntoSets(targetRepsForToday, safeRepsPerSet)
     }
 
     // 300 / 20 → 15 подходов по 20; 50 / 20 → [20, 20, 10].

@@ -31,6 +31,7 @@ data class TodayExerciseItem(
     val completedSets: List<Int>,
 ) {
     val completedToday: Int get() = completedSets.sum()
+    val completedSetsCount: Int get() = completedSets.size
 }
 
 data class TodayWorkoutItem(
@@ -65,9 +66,10 @@ class TodayViewModel(
                     TodayExerciseItem(
                         exercise = exercise,
                         targetForToday = target,
-                        sets = DistributionHelper.splitIntoSets(
-                            target,
-                            exercise.repsPerSet.coerceAtLeast(1),
+                        sets = DistributionHelper.getSetsForExercise(
+                            exercise = exercise,
+                            targetRepsForToday = target,
+                            repsPerSet = exercise.repsPerSet,
                         ),
                         completedSets = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedSets
                             ?: emptyList(),
@@ -87,7 +89,7 @@ class TodayViewModel(
         val reps = item.sets.getOrNull(setIndex) ?: return
         val current = progress.value.firstOrNull { it.exerciseId == exerciseId }?.completedSets ?: emptyList()
 
-        val updated = if (current.getOrNull(setIndex) == reps) {
+        val updated = if (setIndex < current.size) {
             current.filterIndexed { index, _ -> index != setIndex }
         } else {
             current.toMutableList().apply {

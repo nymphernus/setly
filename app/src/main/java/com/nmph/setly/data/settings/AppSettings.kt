@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
     )
     val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled
 
+    private val _autoRestEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_REST, true),
+    )
+    val autoRestEnabled: StateFlow<Boolean> = _autoRestEnabled
+
     fun setDarkTheme(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DARK_THEME, enabled).apply()
         _darkTheme.value = enabled
@@ -34,9 +39,15 @@ class AppSettings(context: Context) {
         _notificationsEnabled.value = enabled
     }
 
+    fun setAutoRestEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_REST, enabled).apply()
+        _autoRestEnabled.value = enabled
+    }
+
     private companion object {
         const val PREFS_NAME = "setly_settings"
         const val KEY_DARK_THEME = "dark_theme"
         const val KEY_NOTIFICATIONS = "notifications_enabled"
+        const val KEY_AUTO_REST = "auto_rest_enabled"
     }
 }

@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -27,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.ui.viewmodel.ProfileStats
@@ -43,8 +48,10 @@ fun ProfileScreen(
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
+    autoRestEnabled: Boolean,
     onToggleDarkTheme: (Boolean) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
+    onToggleAutoRest: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit,
@@ -55,8 +62,7 @@ fun ProfileScreen(
         lastSyncAt != null -> {
             val time = Instant.ofEpochMilli(lastSyncAt)
                 .atZone(ZoneId.systemDefault())
-                .toLocalTime()
-                .format(DateTimeFormatter.ofPattern("HH:mm"))
+                .format(DateTimeFormatter.ofPattern("d MMM, HH:mm"))
             "Последняя синхронизация: $time"
         }
         else -> "Ещё не синхронизировано"
@@ -72,7 +78,7 @@ fun ProfileScreen(
             Text("Профиль", style = MaterialTheme.typography.headlineMedium)
         }
 
-        // Аккаунт / призыв войти
+        // Аккаунт
         item {
             if (isSignedIn) {
                 SectionCard {
@@ -95,7 +101,7 @@ fun ProfileScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                "Синхронизировано с Google",
+                                "Вы в сети",
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
@@ -124,20 +130,28 @@ fun ProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(
-                            Icons.Default.CloudOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
                         Text(
-                            "Всё хранится только на устройстве",
+                            "Гостевой режим",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            "Войдите через Google, чтобы сохранить тренировки и прогресс в облаке.",
+                            "Данные хранятся только на этом устройстве. Войдите через Google, чтобы включить синхронизацию.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             textAlign = TextAlign.Center,
@@ -165,9 +179,24 @@ fun ProfileScreen(
                 modifier = Modifier.padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                StatCard("Тренировок", stats.completedWorkouts.toString(), Modifier.weight(1f))
-                StatCard("Серия, дней", stats.streakDays.toString(), Modifier.weight(1f))
-                StatCard("Повторений", stats.totalReps.toString(), Modifier.weight(1f))
+                StatCard(
+                    icon = Icons.Default.CheckCircle,
+                    label = "Выполнено тренировок",
+                    value = stats.completedWorkouts.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+                StatCard(
+                    icon = Icons.Default.DateRange,
+                    label = "Текущая серия",
+                    value = stats.streakDays.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+                StatCard(
+                    icon = Icons.Default.FitnessCenter,
+                    label = "Всего повторений",
+                    value = stats.totalReps.toString(),
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
@@ -188,6 +217,11 @@ fun ProfileScreen(
             SectionCard {
                 SettingRow("Тёмная тема", darkTheme, onToggleDarkTheme)
                 SettingRow("Уведомления", notificationsEnabled, onToggleNotifications)
+                SettingRow(
+                    "Автоматический отдых",
+                    autoRestEnabled,
+                    onToggleAutoRest,
+                )
             }
         }
 
@@ -200,7 +234,17 @@ fun ProfileScreen(
                     onClick = onSync,
                     enabled = !isSyncing,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                ) { Text("Синхронизировать сейчас") }
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        if (isSyncing) "Синхронизация..." else "Синхронизировать сейчас",
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -223,7 +267,12 @@ private fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
     Card(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
@@ -233,8 +282,14 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
             Text(
                 value,
                 style = MaterialTheme.typography.titleLarge,
@@ -244,6 +299,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
                 label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                textAlign = TextAlign.Center,
             )
         }
     }

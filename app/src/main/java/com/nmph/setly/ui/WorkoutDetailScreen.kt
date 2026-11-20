@@ -17,14 +17,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +36,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -62,6 +68,7 @@ fun WorkoutDetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onComplete: () -> Unit,
+    autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
@@ -70,12 +77,18 @@ fun WorkoutDetailScreen(
     var timeLeft by remember { mutableStateOf(0) }
     var timerRun by remember { mutableStateOf(0) }
     var showCompleteDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val totalSets = todayItem?.exercises?.sumOf { it.sets.size } ?: 0
-    val completedSets = todayItem?.exercises?.sumOf { it.completedToday } ?: 0
+    val completedSets = todayItem?.exercises?.sumOf { it.completedSetsCount } ?: 0
     val totalSeconds = if (workout == null) 0 else {
-        DistributionHelper.effectiveRestMinutes(workout.workout, totalSets) * 60
+        DistributionHelper.effectiveRestMinutes(
+            workout = workout.workout,
+            totalSetsPerDay = totalSets,
+            autoRestEnabled = autoRestEnabled,
+        ) * 60
     }
+    val autoRestActive = workout?.workout?.autoRestTime == true && autoRestEnabled
 
     LaunchedEffect(timerRun) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
@@ -86,13 +99,27 @@ fun WorkoutDetailScreen(
             remaining--
             timeLeft = remaining
         }
+        snackbarHostState.showSnackbar("Отдых окончен! Пора делать следующий подход")
+        timerRun = 0
     }
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Тренировка") },
+                title = {
+                    Column {
+                        Text("Тренировка")
+                        if (timerRun > 0 && timeLeft > 0) {
+                            Text(
+                                "Отдых: %02d:%02d".format(timeLeft / 60, timeLeft % 60),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
@@ -101,15 +128,6 @@ fun WorkoutDetailScreen(
                 actions = {
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Default.Edit, contentDescription = "Редактировать")
-                    }
-                    IconButton(
-                        onClick = { showCompleteDialog = true },
-                        enabled = workout != null && todayItem != null && totalSets > 0,
-                    ) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = "Завершить тренировку",
-                        )
                     }
                 },
             )
@@ -174,10 +192,12 @@ fun WorkoutDetailScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            if (workout.workout.autoRestTime) {
-                                "Отдых: авто ($totalSets подходов → ${totalSeconds / 60} мин)"
-                            } else {
-                                "Отдых: ${workout.workout.restTimeMinutes} мин"
+                            when {
+                                autoRestActive ->
+                                    "Отдых: авто ($totalSets подходов → ${totalSeconds / 60} мин)"
+                                !autoRestEnabled && workout.workout.autoRestTime ->
+                                    "Отдых: ${workout.workout.restTimeMinutes} мин (авто отключено в настройках)"
+                                else -> "Отдых: ${workout.workout.restTimeMinutes} мин"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
@@ -188,7 +208,7 @@ fun WorkoutDetailScreen(
 
             item {
                 AnimatedVisibility(
-                    visible = timerRun > 0 && totalSeconds > 0,
+                    visible = timerRun > 0 && timeLeft > 0 && totalSeconds > 0,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically(),
                 ) {
@@ -237,11 +257,36 @@ fun WorkoutDetailScreen(
                                     timerRun = 0
                                     timeLeft = 0
                                 } else {
+                                    // Новый невыполненный подход перезапускает отдых с нуля.
+                                    timeLeft = totalSeconds
                                     timerRun++
                                 }
                             },
                         )
                     }
+                }
+            }
+
+            item {
+                Button(
+                    onClick = { showCompleteDialog = true },
+                    enabled = todayItem != null && totalSets > 0,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary,
+                    ),
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        "Завершить тренировку",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
             }
         }
@@ -284,7 +329,7 @@ private fun ExerciseSetsCard(
                 )
             }
             Text(
-                "По ${item.exercise.repsPerSet} повторений в подходе",
+                "По ${item.exercise.repsPerSet} повторений в подходе · ${item.sets.size} подходов",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -300,13 +345,12 @@ private fun ExerciseSetsCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item.sets.forEachIndexed { index, reps ->
+                        // Отмечены первые N подходов: одинаковые значения в списке не путаются.
+                        val isChecked = index < item.completedSets.size
                         SetPill(
                             reps = reps,
-                            checked = item.completedSets.getOrNull(index) == reps,
-                            onClick = {
-                                val wasChecked = item.completedSets.getOrNull(index) == reps
-                                onSetClick(index, wasChecked)
-                            },
+                            checked = isChecked,
+                            onClick = { onSetClick(index, isChecked) },
                         )
                     }
                 }

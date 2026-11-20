@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ fun AddEditWorkoutScreen(
     ) -> Unit,
     onCreateExercise: (name: String, reps: Int, repsPerSet: Int) -> Unit,
     onBack: () -> Unit,
+    autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val name = remember { mutableStateOf(workout?.name.orEmpty()) }
@@ -62,6 +64,17 @@ fun AddEditWorkoutScreen(
     val newReps = remember { mutableStateOf("") }
     val newRepsPerSet = remember { mutableStateOf("20") }
     val scrollState = rememberScrollState()
+
+    // Данные тренировки приходят асинхронно из ViewModel — синхронизируем поля после загрузки.
+    LaunchedEffect(workout, initialSelectedIds) {
+        name.value = workout?.name.orEmpty()
+        period.value = workout?.periodDays?.toString().orEmpty()
+        sleepStart.value = workout?.sleepStart ?: "21:00"
+        sleepEnd.value = workout?.sleepEnd ?: "08:00"
+        restMinutes.value = workout?.restTimeMinutes?.toString() ?: "30"
+        autoRest.value = workout?.autoRestTime ?: true
+        selected.value = initialSelectedIds
+    }
 
     Scaffold(
         modifier = modifier,
@@ -117,6 +130,13 @@ fun AddEditWorkoutScreen(
             }
             if (!autoRest.value) {
                 NumberField("Отдых между подходами (мин)", restMinutes.value) { restMinutes.value = it }
+            }
+            if (!autoRestEnabled && workout?.autoRestTime == true) {
+                Text(
+                    "Глобальный автоматический отдых выключен в профиле — используется ручное значение.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
 
             Text("Упражнения", style = MaterialTheme.typography.titleMedium)

@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val darkTheme by settings.darkTheme.collectAsState()
             val notificationsEnabled by settings.notificationsEnabled.collectAsState()
+            val autoRestEnabled by settings.autoRestEnabled.collectAsState()
             var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
             // Напоминание включается/выключается из настроек профиля.
@@ -149,6 +150,7 @@ class MainActivity : ComponentActivity() {
                             isSyncing = isSyncing,
                             darkTheme = darkTheme,
                             notificationsEnabled = notificationsEnabled,
+                            autoRestEnabled = autoRestEnabled,
                             snackbarMessage = snackbarMessage,
                             onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
@@ -161,6 +163,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onToggleDarkTheme = { settings.setDarkTheme(it) },
                             onToggleNotifications = { settings.setNotificationsEnabled(it) },
+                            onToggleAutoRest = { settings.setAutoRestEnabled(it) },
                             onSignIn = {
                                 authManager.signInWithGoogle(this@MainActivity, signInRequestCode)
                             },
@@ -204,6 +207,7 @@ class MainActivity : ComponentActivity() {
                                 snackbarMessage = "Тренировка завершена"
                                 navController.popBackStack()
                             },
+                            autoRestEnabled = autoRestEnabled,
                         )
                     }
                     composable(
@@ -241,6 +245,7 @@ class MainActivity : ComponentActivity() {
                                 workoutVM.createExercise(name, reps, perSet)
                             },
                             onBack = { navController.popBackStack() },
+                            autoRestEnabled = autoRestEnabled,
                         )
                     }
                     composable(
