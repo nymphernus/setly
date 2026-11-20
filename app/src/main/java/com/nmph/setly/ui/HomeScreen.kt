@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,25 +45,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.ui.components.EmptyStateView
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
+import com.nmph.setly.utils.DistributionHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    workouts: List<WorkoutWithExercises>,
+    workouts: List<WorkoutPlan>,
     todayWorkouts: List<TodayWorkoutItem> = emptyList(),
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
-    onDeleteWorkout: (WorkoutWithExercises) -> Unit,
+    onDeleteWorkout: (WorkoutPlan) -> Unit,
     onCreateWorkout: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val pendingDelete = remember { mutableStateOf<WorkoutWithExercises?>(null) }
+    val pendingDelete = remember { mutableStateOf<WorkoutPlan?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val progressByWorkout = remember(todayWorkouts) {
         todayWorkouts.associateBy({ it.workout.id }, { it })
@@ -81,14 +80,6 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
-                },
-                actions = {
-                    IconButton(onClick = onOpenProfile) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Открыть профиль",
-                        )
-                    }
                 },
             )
         },
@@ -147,7 +138,7 @@ fun HomeScreen(
 
 @Composable
 private fun WorkoutCard(
-    item: WorkoutWithExercises,
+    item: WorkoutPlan,
     todayItem: TodayWorkoutItem?,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
@@ -218,8 +209,10 @@ private fun WorkoutCard(
                     }
                 }
             }
+            val totalSets = todayItem?.totalSets
+                ?: item.exercises.sumOf { DistributionHelper.setsForPlan(it).size }
             Text(
-                "Отдых: ${restLabel(item)}",
+                "Отдых: ${DistributionHelper.restMinutes(item.workout.sleepStart, item.workout.sleepEnd, totalSets)} мин",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -249,10 +242,4 @@ private fun WorkoutCard(
             }
         }
     }
-}
-
-private fun restLabel(item: WorkoutWithExercises): String = if (item.workout.autoRestTime) {
-    "авто"
-} else {
-    "${item.workout.restTimeMinutes} мин"
 }

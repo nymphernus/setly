@@ -1,5 +1,6 @@
 package com.nmph.setly.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,14 +13,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -35,23 +38,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
-import com.nmph.setly.data.local.WorkoutEntity
+import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.utils.DistributionHelper
 
 private data class SelectedExerciseInput(
     val exerciseId: Int,
-    val targetReps: String,
+    val dailyTargetReps: String,
 )
 
 private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInput>>, List<Pair<Int, String>>>(
-    save = { state -> state.value.map { it.exerciseId to it.targetReps } },
+    save = { state -> state.value.map { it.exerciseId to it.dailyTargetReps } },
     restore = { saved -> mutableStateOf(saved.map { SelectedExerciseInput(it.first, it.second) }) },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditWorkoutScreen(
-    workout: WorkoutEntity?,
+    workout: WorkoutPlan?,
     availableExercises: List<ExerciseEntity>,
     initialSelectedIds: Set<Int> = emptySet(),
     initialTargets: Map<Int, Int> = emptyMap(),
@@ -60,41 +63,42 @@ fun AddEditWorkoutScreen(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        restTimeMinutes: Int,
-        autoRestTime: Boolean,
-        targets: Map<Int, Int>,
+        dailyTargets: Map<Int, Int>,
     ) -> Unit,
     onBack: () -> Unit,
-    autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val name = rememberSaveable { mutableStateOf(workout?.name.orEmpty()) }
-    val period = rememberSaveable { mutableStateOf(workout?.periodDays?.toString().orEmpty()) }
-    val restMinutes = rememberSaveable {
-        mutableStateOf(workout?.restTimeMinutes?.toString() ?: DistributionHelper.DEFAULT_REST_MINUTES.toString())
+    val name = rememberSaveable { mutableStateOf(workout?.workout?.name.orEmpty()) }
+    val period = rememberSaveable {
+        mutableStateOf(workout?.workout?.periodDays?.toString() ?: "30")
     }
-    val autoRest = rememberSaveable { mutableStateOf(workout?.autoRestTime ?: true) }
+    val sleepStart = rememberSaveable {
+        mutableStateOf(workout?.workout?.sleepStart ?: "22:00")
+    }
+    val sleepEnd = rememberSaveable {
+        mutableStateOf(workout?.workout?.sleepEnd ?: "08:00")
+    }
     val selectedExercises = rememberSaveable(saver = SelectedExercisesSaver) {
         mutableStateOf(emptyList<SelectedExerciseInput>())
     }
     val initializedWorkoutId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
+    val showExercisePicker = rememberSaveable { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
-    // Данные приходят асинхронно. Не трогаем сохранённый ввод после поворота экрана.
-    LaunchedEffect(workout, initialSelectedIds, initialTargets, availableExercises) {
-        val incomingId = workout?.id ?: -1
+    // План приходит асинхронно; не перезаписываем уже введённые данные при повороте экрана.
+    LaunchedEffect(workout?.workout?.id, initialSelectedIds, initialTargets) {
+        val incomingId = workout?.workout?.id ?: -1
         if (initializedWorkoutId.value == incomingId) return@LaunchedEffect
-        name.value = workout?.name.orEmpty()
-        period.value = workout?.periodDays?.toString() ?: "30"
-        restMinutes.value = workout?.restTimeMinutes?.toString()
-            ?: DistributionHelper.DEFAULT_REST_MINUTES.toString()
-        autoRest.value = workout?.autoRestTime ?: true
-        selectedExercises.value = initialSelectedIds.map { id ->
-            val stored = initialTargets[id]
-                ?: availableExercises.firstOrNull { it.id == id }?.targetReps
-                ?: 0
-            val value = if (stored > 0) stored else DistributionHelper.DEFAULT_TARGET_REPS
-            SelectedExerciseInput(id, value.toString())
+        name.value = workout?.workout?.name.orEmpty()
+        period.value = workout?.workout?.periodDays?.toString() ?: "30"
+        sleepStart.value = workout?.workout?.sleepStart ?: "22:00"
+        sleepEnd.value = workout?.workout?.sleepEnd ?: "08:00"
+        val ids = (initialSelectedIds + initialTargets.keys).toList()
+        selectedExercises.value = ids.map { id ->
+            SelectedExerciseInput(
+                exerciseId = id,
+                dailyTargetReps = (initialTargets[id] ?: DistributionHelper.DEFAULT_DAILY_TARGET_REPS).toString(),
+            )
         }
         initializedWorkoutId.value = incomingId
     }
@@ -103,7 +107,9 @@ fun AddEditWorkoutScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(if (workout == null) "Новая тренировка" else "Редактирование тренировки") },
+                title = {
+                    Text(if (workout == null) "Новая тренировка" else "Редактирование тренировки")
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
@@ -121,18 +127,11 @@ fun AddEditWorkoutScreen(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                "Тренировка распределяет выбранные упражнения по дням. " +
-                    "Для каждого упражнения задайте общее число повторений за весь период.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
             OutlinedTextField(
                 value = name.value,
                 onValueChange = { name.value = it },
                 label = { Text("Название тренировки") },
-                placeholder = { Text("Например, МаксОтжим") },
+                placeholder = { Text("Введите название") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -142,101 +141,82 @@ fun AddEditWorkoutScreen(
                 placeholder = "30",
                 onChange = { period.value = it },
             )
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = autoRest.value,
-                    onCheckedChange = { autoRest.value = it },
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TimeField(
+                    label = "Сон начало",
+                    value = sleepStart.value,
+                    placeholder = "22:00",
+                    onChange = { sleepStart.value = it },
+                    modifier = Modifier.weight(1f),
                 )
-                Column {
-                    Text("Отдых рассчитывать автоматически")
-                    Text(
-                        "24 часа делятся на число подходов в день, максимум ${DistributionHelper.MAX_REST_MINUTES} мин",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (!autoRest.value) {
-                NumberField(
-                    label = "Отдых между подходами (мин)",
-                    value = restMinutes.value,
-                    placeholder = "30",
-                    onChange = { restMinutes.value = it },
-                )
-            }
-            if (!autoRestEnabled && workout?.autoRestTime == true) {
-                Text(
-                    "В профиле выключен автоматический отдых — используется ручное значение.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                TimeField(
+                    label = "Сон конец",
+                    value = sleepEnd.value,
+                    placeholder = "08:00",
+                    onChange = { sleepEnd.value = it },
+                    modifier = Modifier.weight(1f),
                 )
             }
 
-            Text("Упражнения", style = MaterialTheme.typography.titleMedium)
-            if (availableExercises.isEmpty()) {
-                Text(
-                    "Сначала создайте упражнения на вкладке «Упражнения».",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Button(
+                onClick = { showExercisePicker.value = true },
+                enabled = availableExercises.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text(" Добавить упражнение")
+            }
+
+            val selectedIds = selectedExercises.value.map { it.exerciseId }.toSet()
+            val selected = availableExercises.filter { it.id in selectedIds }
+            selected.forEach { exercise ->
+                val input = selectedExercises.value.first { it.exerciseId == exercise.id }
+                SelectedExerciseCard(
+                    exercise = exercise,
+                    dailyTargetReps = input.dailyTargetReps,
+                    onTargetChange = { value ->
+                        selectedExercises.value = selectedExercises.value.map {
+                            if (it.exerciseId == exercise.id) {
+                                it.copy(dailyTargetReps = value)
+                            } else {
+                                it
+                            }
+                        }
+                    },
+                    onRemove = {
+                        selectedExercises.value = selectedExercises.value.filterNot {
+                            it.exerciseId == exercise.id
+                        }
+                    },
                 )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    availableExercises.forEach { exercise ->
-                        val input = selectedExercises.value.firstOrNull { it.exerciseId == exercise.id }
-                        ExerciseSelectionRow(
-                            exercise = exercise,
-                            checked = input != null,
-                            targetReps = input?.targetReps.orEmpty(),
-                            onCheckedChange = { checked ->
-                                selectedExercises.value = if (checked) {
-                                    val defaultTarget = if (exercise.targetReps > 0) {
-                                        exercise.targetReps.toString()
-                                    } else {
-                                        DistributionHelper.DEFAULT_TARGET_REPS.toString()
-                                    }
-                                    selectedExercises.value + SelectedExerciseInput(exercise.id, defaultTarget)
-                                } else {
-                                    selectedExercises.value.filterNot { it.exerciseId == exercise.id }
-                                }
-                            },
-                            onTargetChange = { value ->
-                                selectedExercises.value = selectedExercises.value.map {
-                                    if (it.exerciseId == exercise.id) it.copy(targetReps = value) else it
-                                }
-                            },
-                        )
-                    }
-                }
             }
 
             val targetsValid = selectedExercises.value.isNotEmpty() &&
-                selectedExercises.value.all { (it.targetReps.toIntOrNull() ?: 0) > 0 }
+                selectedExercises.value.all { (it.dailyTargetReps.toIntOrNull() ?: 0) > 0 }
             val canSave = name.value.isNotBlank() &&
                 (period.value.toIntOrNull() ?: 0) > 0 &&
-                (restMinutes.value.toIntOrNull() ?: 0) > 0 &&
+                isValidTime(sleepStart.value) &&
+                isValidTime(sleepEnd.value) &&
                 targetsValid
 
             if (!targetsValid) {
                 Text(
-                    "Выберите хотя бы одно упражнение и укажите положительную цель повторений.",
+                    "Добавьте упражнение и укажите, сколько раз в день его нужно делать.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
 
-            androidx.compose.material3.Button(
+            Button(
                 onClick = {
                     if (canSave) {
                         onSave(
                             name.value.trim(),
                             period.value.toInt(),
-                            workout?.sleepStart ?: "21:00",
-                            workout?.sleepEnd ?: "08:00",
-                            restMinutes.value.toInt(),
-                            autoRest.value,
+                            sleepStart.value,
+                            sleepEnd.value,
                             selectedExercises.value.associate {
-                                it.exerciseId to (it.targetReps.toIntOrNull() ?: 0)
+                                it.exerciseId to (it.dailyTargetReps.toIntOrNull() ?: 0)
                             },
                         )
                     }
@@ -246,15 +226,67 @@ fun AddEditWorkoutScreen(
             ) { Text("Сохранить") }
         }
     }
+
+    if (showExercisePicker.value) {
+        ModalBottomSheet(onDismissRequest = { showExercisePicker.value = false }) {
+            val alreadyAdded = selectedExercises.value.map { it.exerciseId }.toSet()
+            val candidates = availableExercises.filterNot { it.id in alreadyAdded }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    "Выберите упражнение",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+                if (candidates.isEmpty()) {
+                    Text(
+                        "Все созданные упражнения уже добавлены.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                } else {
+                    candidates.forEach { exercise ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedExercises.value = selectedExercises.value + SelectedExerciseInput(
+                                        exerciseId = exercise.id,
+                                        dailyTargetReps = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
+                                    )
+                                    showExercisePicker.value = false
+                                }
+                                .padding(vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(exercise.name, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "Подход по ${exercise.repsPerSet} раз",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun ExerciseSelectionRow(
+private fun SelectedExerciseCard(
     exercise: ExerciseEntity,
-    checked: Boolean,
-    targetReps: String,
-    onCheckedChange: (Boolean) -> Unit,
+    dailyTargetReps: String,
     onTargetChange: (String) -> Unit,
+    onRemove: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -267,29 +299,24 @@ private fun ExerciseSelectionRow(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = checked, onCheckedChange = onCheckedChange)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(exercise.name, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "${exercise.repsPerSet} повторений в подходе",
+                        "Подход по ${exercise.repsPerSet} раз",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (checked) {
-                    IconButton(onClick = { onCheckedChange(false) }) {
-                        Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
-                    }
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Default.Close, contentDescription = "Убрать упражнение")
                 }
             }
-            if (checked) {
-                NumberField(
-                    label = "Всего повторений за период",
-                    value = targetReps,
-                    placeholder = "300",
-                    onChange = onTargetChange,
-                )
-            }
+            NumberField(
+                label = "Сколько раз в день",
+                value = dailyTargetReps,
+                placeholder = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
+                onChange = onTargetChange,
+            )
         }
     }
 }
@@ -310,4 +337,33 @@ private fun NumberField(
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
+}
+
+@Composable
+private fun TimeField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { raw ->
+            onChange(raw.filter { it.isDigit() || it == ':' }.take(5))
+        },
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        modifier = modifier,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    )
+}
+
+private fun isValidTime(value: String): Boolean {
+    val parts = value.split(":")
+    if (parts.size != 2 || parts[0].length != 2 || parts[1].length != 2) return false
+    val hours = parts[0].toIntOrNull() ?: return false
+    val minutes = parts[1].toIntOrNull() ?: return false
+    return hours in 0..23 && minutes in 0..59
 }

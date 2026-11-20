@@ -5,13 +5,18 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nmph.setly.data.local.ExerciseDao
 import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.data.local.PlannedExercise
+import com.nmph.setly.data.local.PlannedExerciseRow
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
-import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.local.WorkoutExerciseCrossRef
+import com.nmph.setly.data.local.WorkoutPlan
+import com.nmph.setly.data.local.withPlans
 import com.nmph.setly.data.sync.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -21,15 +26,14 @@ class WorkoutViewModel(
     private val exerciseDao: ExerciseDao,
     private val syncManager: SyncManager,
 ) : ViewModel() {
-    val workouts: StateFlow<List<WorkoutWithExercises>> = workoutDao.getAllWorkouts()
+    val workouts: StateFlow<List<WorkoutPlan>> = combine(
+        workoutDao.getAllWorkouts(),
+        workoutDao.observePlannedExercises(),
+    ) { workoutEntities, rows -> workoutEntities.withPlans(rows) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val exercises: StateFlow<List<ExerciseEntity>> = exerciseDao.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    fun getWorkoutById(id: Int, onResult: (WorkoutWithExercises?) -> Unit) {
-        viewModelScope.launch { onResult(workoutDao.getWorkoutById(id)) }
-    }
 
     fun saveWorkout(
         id: Int,
@@ -37,21 +41,11 @@ class WorkoutViewModel(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        restTimeMinutes: Int,
-        autoRestTime: Boolean,
-        exerciseTargets: Map<Int, Int>,
+        dailyTargets: Map<Int, Int>,
         onResult: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
-            // targetReps задаётся в тренировке, но хранится вместе с упражнением.
-            // Обновляем его до сохранения связей, чтобы расчёт подходов сразу использовал новые цели.
-            exerciseTargets.forEach { (exerciseId, target) ->
-                exerciseDao.getExerciseById(exerciseId)?.let { exercise ->
-                    exerciseDao.update(exercise.copy(targetReps = target.coerceAtLeast(0)))
-                }
-            }
-            val exerciseIds = exerciseTargets.keys.toList()
-            val existing = if (id != -1) workoutDao.getWorkoutById(id)?.workout else null
+            val existing = workouts.value.firstOrNull { it.workout.id == id }?.workout
             val isNew = existing == null
             val workout = WorkoutEntity(
                 id = existing?.id ?: 0,
@@ -60,14 +54,26 @@ class WorkoutViewModel(
                 periodDays = periodDays,
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,
-                restTimeMinutes = restTimeMinutes,
-                autoRestTime = autoRestTime,
             )
+            val links = dailyTargets.map { (exerciseId, target) ->
+                WorkoutExerciseCrossRef(
+                    workoutId = 0,
+                    exerciseId = exerciseId,
+                    dailyTargetReps = target.coerceAtLeast(0),
+                )
+            }
             // Сначала сохраняем локально (offline-first), затем бэкапим в облако.
-            val savedId = workoutDao.saveWorkout(workout, exerciseIds)
-            val savedExercises = exerciseIds.mapNotNull { exerciseDao.getExerciseById(it) }
+            val savedId = workoutDao.saveWorkout(workout, links)
+            val savedPlan = WorkoutPlan(
+                workout = workout.copy(id = savedId),
+                exercises = links.mapNotNull { link ->
+                    exerciseDao.getExerciseById(link.exerciseId)?.let { exercise ->
+                        PlannedExercise(exercise, link.dailyTargetReps)
+                    }
+                },
+            )
             onResult(if (isNew) "Тренировка создана" else "Тренировка обновлена")
-            pushToCloud(workout.copy(id = savedId), savedExercises)
+            pushToCloud(savedPlan)
         }
     }
 
@@ -94,10 +100,10 @@ class WorkoutViewModel(
         }
     }
 
-    private suspend fun pushToCloud(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {
+    private suspend fun pushToCloud(plan: WorkoutPlan) {
         if (!syncManager.isSignedIn) return
         withContext(Dispatchers.IO) {
-            runCatching { syncManager.pushWorkoutsToCloud(workout, exercises) }
+            runCatching { syncManager.pushWorkoutToCloud(plan) }
         }
     }
 }

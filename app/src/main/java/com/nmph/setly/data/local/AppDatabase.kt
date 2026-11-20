@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -142,6 +142,83 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v8: цель становится дневной и живёт в связи тренировка↔упражнение.
+        // Старый targetReps был общим за период, поэтому пересчитываем его в дневную норму:
+        // ceil(targetReps / periodDays). Ручной/авто отдых больше не хранится — он всегда авто.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `workout_exercise_cross_ref_new` (
+                        `workoutId` INTEGER NOT NULL,
+                        `exerciseId` INTEGER NOT NULL,
+                        `dailyTargetReps` INTEGER NOT NULL,
+                        PRIMARY KEY(`workoutId`, `exerciseId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `workout_exercise_cross_ref_new`
+                        (`workoutId`, `exerciseId`, `dailyTargetReps`)
+                    SELECT cr.`workoutId`, cr.`exerciseId`,
+                           CASE WHEN w.`periodDays` > 0 AND e.`targetReps` > 0
+                                THEN (e.`targetReps` + w.`periodDays` - 1) / w.`periodDays`
+                                ELSE 0 END
+                    FROM `workout_exercise_cross_ref` cr
+                    INNER JOIN `workouts` w ON w.`id` = cr.`workoutId`
+                    INNER JOIN `exercises` e ON e.`id` = cr.`exerciseId`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `workout_exercise_cross_ref`")
+                db.execSQL(
+                    "ALTER TABLE `workout_exercise_cross_ref_new` RENAME TO `workout_exercise_cross_ref`",
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE `exercises_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `repsPerSet` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `exercises_new` (`id`, `name`, `repsPerSet`)
+                    SELECT `id`, `name`, `repsPerSet` FROM `exercises`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `exercises`")
+                db.execSQL("ALTER TABLE `exercises_new` RENAME TO `exercises`")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE `workouts_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `startDate` INTEGER NOT NULL,
+                        `periodDays` INTEGER NOT NULL,
+                        `sleepStart` TEXT NOT NULL,
+                        `sleepEnd` TEXT NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `workouts_new` (`id`, `name`, `startDate`, `periodDays`, `sleepStart`, `sleepEnd`)
+                    SELECT `id`, `name`, `startDate`, `periodDays`, `sleepStart`, `sleepEnd` FROM `workouts`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `workouts`")
+                db.execSQL("ALTER TABLE `workouts_new` RENAME TO `workouts`")
+
+                // Число подходов изменилось — старые отметки больше не соответствуют чипсам.
+                db.execSQL("UPDATE `progress` SET `completedSets` = '', `isCompleted` = 0")
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -152,7 +229,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                        MIGRATION_6_7,
+                        MIGRATION_6_7, MIGRATION_7_8,
                     )
                     .build().also { INSTANCE = it }
             }

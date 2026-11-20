@@ -1,63 +1,53 @@
 package com.nmph.setly
 
 import com.nmph.setly.data.local.ExerciseEntity
-import com.nmph.setly.data.local.WorkoutEntity
+import com.nmph.setly.data.local.PlannedExercise
 import com.nmph.setly.utils.DistributionHelper
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class DistributionHelperTest {
-    private fun workout(
-        periodDays: Int,
-        autoRestTime: Boolean = true,
-        restTimeMinutes: Int = 30,
-    ) = WorkoutEntity(
-        name = "Тест",
-        startDate = 0L,
-        periodDays = periodDays,
-        sleepStart = "21:00",
-        sleepEnd = "08:00",
-        restTimeMinutes = restTimeMinutes,
-        autoRestTime = autoRestTime,
-    )
-
-    private fun exercise(targetReps: Int, repsPerSet: Int = 20) = ExerciseEntity(
+    private fun exercise(repsPerSet: Int = 30) = ExerciseEntity(
         name = "Отжимания",
-        targetReps = targetReps,
         repsPerSet = repsPerSet,
     )
 
+    private fun plan(dailyTargetReps: Int, repsPerSet: Int = 30) = PlannedExercise(
+        exercise = exercise(repsPerSet),
+        dailyTargetReps = dailyTargetReps,
+    )
+
     @Test
-    fun `daily reps are rounded up`() {
-        assertEquals(10, DistributionHelper.dailyReps(workout(30), exercise(300)))
-        assertEquals(43, DistributionHelper.dailyReps(workout(7), exercise(300)))
+    fun `sleep across midnight is measured correctly`() {
+        assertEquals(600, DistributionHelper.sleepMinutes("22:00", "08:00"))
+        assertEquals(660, DistributionHelper.sleepMinutes("21:00", "08:00"))
     }
 
     @Test
-    fun `daily reps are split by reps per set`() {
-        val exercise = exercise(300, 20)
-        assertEquals(listOf(10), DistributionHelper.getSetsForExercise(exercise, 10))
-        assertEquals(listOf(20, 20, 3), DistributionHelper.getSetsForExercise(exercise, 43))
+    fun `daily target is split into equal sets`() {
+        val sets = DistributionHelper.setsForPlan(plan(dailyTargetReps = 300, repsPerSet = 30))
+        assertEquals(10, sets.size)
+        assertEquals(List(10) { 30 }, sets)
     }
 
     @Test
-    fun `rest is based on set count and capped at 120 minutes`() {
-        assertEquals(96, DistributionHelper.effectiveRestMinutes(workout(30), 15))
-        assertEquals(120, DistributionHelper.effectiveRestMinutes(workout(30), 1))
-        assertEquals(30, DistributionHelper.effectiveRestMinutes(workout(30), 0))
-    }
-
-    @Test
-    fun `manual rest is used when auto rest is off`() {
-        assertEquals(45, DistributionHelper.effectiveRestMinutes(workout(30, false, 45), 15))
+    fun `last set can be shorter`() {
         assertEquals(
-            45,
-            DistributionHelper.effectiveRestMinutes(workout(30, true, 45), 15, autoRestEnabled = false),
+            listOf(20, 20, 3),
+            DistributionHelper.setsForDay(dailyTargetReps = 43, repsPerSet = 20),
         )
     }
 
     @Test
-    fun `manual rest above the limit is capped`() {
-        assertEquals(120, DistributionHelper.effectiveRestMinutes(workout(30, false, 200), 15))
+    fun `rest uses awake time and is capped at 120 minutes`() {
+        // 22:00-08:00 = 10 ч сна → 14 ч бодрствования → 840 / 10 = 84 мин.
+        assertEquals(84, DistributionHelper.restMinutes("22:00", "08:00", 10))
+        assertEquals(120, DistributionHelper.restMinutes("22:00", "08:00", 1))
+        assertEquals(120, DistributionHelper.restMinutes("23:59", "00:00", 10))
+    }
+
+    @Test
+    fun `rest is never less than one minute`() {
+        assertEquals(1, DistributionHelper.restMinutes("22:00", "08:00", 1_000))
     }
 }

@@ -29,24 +29,34 @@ interface WorkoutDao {
     @Query("DELETE FROM workout_exercise_cross_ref WHERE exerciseId = :exerciseId")
     suspend fun deleteExerciseLinks(exerciseId: Int)
 
-    @Transaction
     @Query("SELECT * FROM workouts ORDER BY startDate DESC")
-    fun getAllWorkouts(): Flow<List<WorkoutWithExercises>>
+    fun getAllWorkouts(): Flow<List<WorkoutEntity>>
+
+    @Query(
+        """
+        SELECT cr.workoutId AS workoutId,
+               e.id AS id,
+               e.name AS name,
+               e.repsPerSet AS repsPerSet,
+               cr.dailyTargetReps AS dailyTargetReps
+        FROM workout_exercise_cross_ref cr
+        INNER JOIN exercises e ON e.id = cr.exerciseId
+        ORDER BY cr.workoutId
+        """,
+    )
+    fun observePlannedExercises(): Flow<List<PlannedExerciseRow>>
 
     @Transaction
-    @Query("SELECT * FROM workouts WHERE id = :workoutId")
-    suspend fun getWorkoutById(workoutId: Int): WorkoutWithExercises?
-
-    // Возвращаем итоговый ID: он нужен SyncManager для пути users/{uid}/workouts/{id}.
-    @Transaction
-    suspend fun saveWorkout(workout: WorkoutEntity, exerciseIds: List<Int>): Int {
-        val id = if (workout.id == 0) insert(workout).toInt() else {
+    suspend fun saveWorkout(workout: WorkoutEntity, plans: List<WorkoutExerciseCrossRef>): Int {
+        val id = if (workout.id == 0) {
+            insert(workout).toInt()
+        } else {
             update(workout)
             workout.id
         }
         clearExercises(id)
-        if (exerciseIds.isNotEmpty()) {
-            insertCrossRefs(exerciseIds.map { WorkoutExerciseCrossRef(id, it) })
+        if (plans.isNotEmpty()) {
+            insertCrossRefs(plans.map { it.copy(workoutId = id) })
         }
         return id
     }

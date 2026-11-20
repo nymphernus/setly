@@ -28,7 +28,7 @@ import androidx.work.WorkManager
 import com.google.firebase.firestore.FirebaseFirestore
 import com.nmph.setly.data.auth.AuthManager
 import com.nmph.setly.data.local.AppDatabase
-import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.data.settings.AppSettings
 import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.ui.AddEditExerciseScreen
@@ -80,7 +80,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val darkTheme by settings.darkTheme.collectAsState()
             val notificationsEnabled by settings.notificationsEnabled.collectAsState()
-            val autoRestEnabled by settings.autoRestEnabled.collectAsState()
             var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
             // Напоминание включается/выключается из настроек профиля.
@@ -151,7 +150,6 @@ class MainActivity : ComponentActivity() {
                             isSyncing = isSyncing,
                             darkTheme = darkTheme,
                             notificationsEnabled = notificationsEnabled,
-                            autoRestEnabled = autoRestEnabled,
                             snackbarMessage = snackbarMessage,
                             onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
@@ -165,7 +163,6 @@ class MainActivity : ComponentActivity() {
                             },
                             onToggleDarkTheme = { settings.setDarkTheme(it) },
                             onToggleNotifications = { settings.setNotificationsEnabled(it) },
-                            onToggleAutoRest = { settings.setAutoRestEnabled(it) },
                             onSignIn = {
                                 authManager.signInWithGoogle(this@MainActivity, signInRequestCode)
                             },
@@ -196,10 +193,7 @@ class MainActivity : ComponentActivity() {
                         }),
                     ) { entry ->
                         val id = entry.arguments?.getInt("workoutId") ?: -1
-                        var selectedWorkout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
-                        LaunchedEffect(id) {
-                            workoutVM.getWorkoutById(id) { found -> selectedWorkout = found }
-                        }
+                        val selectedWorkout: WorkoutPlan? = workouts.firstOrNull { it.workout.id == id }
                         WorkoutDetailScreen(
                             workout = selectedWorkout,
                             todayViewModel = todayVM,
@@ -209,7 +203,6 @@ class MainActivity : ComponentActivity() {
                                 snackbarMessage = "Тренировка завершена"
                                 navController.popBackStack()
                             },
-                            autoRestEnabled = autoRestEnabled,
                         )
                     }
                     composable(
@@ -220,35 +213,27 @@ class MainActivity : ComponentActivity() {
                         }),
                     ) { entry ->
                         val id = entry.arguments?.getInt("workoutId") ?: -1
-                        var editingWorkout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
-                        var initialSelected by remember { mutableStateOf(emptySet<Int>()) }
-                        var initialTargets by remember { mutableStateOf(emptyMap<Int, Int>()) }
-                        LaunchedEffect(id) {
-                            if (id != -1) {
-                                workoutVM.getWorkoutById(id) { found ->
-                                    editingWorkout = found
-                                    initialSelected = found?.exercises?.map { it.id }?.toSet() ?: emptySet()
-                                    initialTargets = found?.exercises?.associate { it.id to it.targetReps }
-                                        ?: emptyMap()
-                                }
-                            }
+                        val editingPlan: WorkoutPlan? = if (id == -1) {
+                            null
+                        } else {
+                            workouts.firstOrNull { it.workout.id == id }
                         }
+                        val initialTargets = editingPlan?.exercises
+                            ?.associate { it.exercise.id to it.dailyTargetReps }
+                            ?: emptyMap()
                         AddEditWorkoutScreen(
-                            workout = editingWorkout?.workout,
+                            workout = editingPlan,
                             availableExercises = exercises,
-                            initialSelectedIds = initialSelected,
                             initialTargets = initialTargets,
-                            onSave = { name, period, sleepStart, sleepEnd, restMinutes, autoRest, targets ->
+                            onSave = { name, period, sleepStart, sleepEnd, targets ->
                                 workoutVM.saveWorkout(
-                                    id, name, period, sleepStart, sleepEnd,
-                                    restMinutes, autoRest, targets,
+                                    id, name, period, sleepStart, sleepEnd, targets,
                                 ) { message ->
                                     snackbarMessage = message
                                     navController.popBackStack()
                                 }
                             },
                             onBack = { navController.popBackStack() },
-                            autoRestEnabled = autoRestEnabled,
                         )
                     }
                     composable(

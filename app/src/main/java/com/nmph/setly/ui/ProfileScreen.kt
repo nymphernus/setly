@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -26,7 +25,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -61,14 +59,11 @@ fun ProfileScreen(
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
-    autoRestEnabled: Boolean,
     onToggleDarkTheme: (Boolean) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
-    onToggleAutoRest: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val syncText = when {
@@ -94,14 +89,6 @@ fun ProfileScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "На главный экран",
-                        )
-                    }
                 },
             )
         },
@@ -259,11 +246,6 @@ fun ProfileScreen(
                 SectionCard {
                     SettingRow("Темная тема", darkTheme, onToggleDarkTheme)
                     SettingRow("Уведомления", notificationsEnabled, onToggleNotifications)
-                    SettingRow(
-                        "Автоматический отдых",
-                        autoRestEnabled,
-                        onToggleAutoRest,
-                    )
                 }
             }
 

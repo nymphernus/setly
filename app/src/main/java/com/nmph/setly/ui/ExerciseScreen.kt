@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -56,7 +55,6 @@ import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 @Composable
 fun ExerciseScreen(
     viewModel: ExerciseViewModel,
-    onBack: () -> Unit,
     onEdit: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -77,14 +75,6 @@ fun ExerciseScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "На главный экран",
-                        )
-                    }
                 },
             )
         },

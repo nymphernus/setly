@@ -50,7 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.ui.components.EmptyStateView
 import com.nmph.setly.ui.components.RestTimer
 import com.nmph.setly.ui.components.SetPill
@@ -64,12 +64,11 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutDetailScreen(
-    workout: WorkoutWithExercises?,
+    workout: WorkoutPlan?,
     todayViewModel: TodayViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onComplete: () -> Unit,
-    autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
@@ -82,21 +81,18 @@ fun WorkoutDetailScreen(
     val totalSets = todayItem?.totalSets ?: 0
     val completedSets = todayItem?.completedSets ?: 0
     val isDone = todayItem?.isDone == true
-    val targetReps = todayItem?.exercises?.sumOf { it.targetForToday } ?: 0
+    val targetReps = todayItem?.exercises?.sumOf { it.dailyTargetReps } ?: 0
     val doneReps = todayItem?.exercises?.sumOf { it.completedToday } ?: 0
     val remainingReps = (targetReps - doneReps).coerceAtLeast(0)
-    val totalSeconds = if (workout == null) 0 else {
-        DistributionHelper.effectiveRestMinutes(
-            workout = workout.workout,
-            totalSetsPerDay = totalSets,
-            autoRestEnabled = autoRestEnabled,
-        ) * 60
+    val restMinutes = if (workout == null) {
+        0
+    } else {
+        DistributionHelper.restMinutes(workout.workout.sleepStart, workout.workout.sleepEnd, totalSets)
     }
-    val restMinutes = if (workout == null) 0 else totalSeconds / 60
+    val totalSeconds = restMinutes * 60
 
     LaunchedEffect(timerRun, totalSeconds) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
-        // После поворота продолжаем с сохранённого остатка.
         var remaining = if (timeLeft > 0) timeLeft else totalSeconds
         timeLeft = remaining
         while (remaining > 0) {
@@ -122,7 +118,9 @@ fun WorkoutDetailScreen(
                         )
                         if (workout != null) {
                             Text(
-                                "Период: ${workout.workout.periodDays} дней · Сон: ${workout.workout.sleepStart} - ${workout.workout.sleepEnd}",
+                                "Период: ${workout.workout.periodDays} дней · Сон: " +
+                                    "${workout.workout.sleepStart} - ${workout.workout.sleepEnd} · " +
+                                    "Отдых: $restMinutes мин",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -202,29 +200,6 @@ fun WorkoutDetailScreen(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.Block),
             contentPadding = PaddingValues(AppSpacing.Block),
         ) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(),
-                    shape = AppCards.Shape,
-                    elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                ) {
-                    Text(
-                        when {
-                            workout.workout.autoRestTime && !autoRestEnabled ->
-                                "Отдых: $restMinutes мин (авто выключено в профиле)"
-                            workout.workout.autoRestTime -> "Отдых: $restMinutes мин (авто)"
-                            else -> "Отдых: ${workout.workout.restTimeMinutes} мин"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(AppSpacing.CardInner),
-                    )
-                }
-            }
-
             if (isDone) {
                 item {
                     Card(
@@ -286,15 +261,6 @@ fun WorkoutDetailScreen(
                             "Тренировка не активна сегодня — подходы появятся в её периоде.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    items(workout.exercises.size) { position ->
-                        val exercise = workout.exercises[position]
-                        val daily = DistributionHelper.dailyReps(workout.workout, exercise)
-                        val sets = DistributionHelper.getSetsForExercise(exercise, daily)
-                        Text(
-                            "• ${exercise.name} — ${sets.joinToString(", ")} раз по дням",
-                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
@@ -361,8 +327,13 @@ private fun ExerciseSetsCard(
                 color = MaterialTheme.colorScheme.tertiary,
             )
             Text(
-                "Сегодня: ${item.completedToday} повторений (${item.completedSetsCount} подходов)",
+                "Сегодня: ${item.dailyTargetReps} раз (${item.sets.size} подходов)",
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Отмечено подходов: ${item.completedSetsCount} из ${item.sets.size}",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (item.sets.isEmpty()) {

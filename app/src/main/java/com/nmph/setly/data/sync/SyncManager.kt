@@ -9,6 +9,8 @@ import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.ProgressEntity
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseCrossRef
+import com.nmph.setly.data.local.WorkoutPlan
+import com.nmph.setly.data.local.withPlans
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -37,8 +39,9 @@ class SyncManager(
 
     val isSignedIn: Boolean get() = auth.currentUser != null
 
-    suspend fun pushWorkoutsToCloud(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {
+    suspend fun pushWorkoutToCloud(plan: WorkoutPlan) {
         val uid = currentUid() ?: return
+        val workout = plan.workout
         val workoutRef = users().document(uid)
             .collection("workouts")
             .document(workout.id.toString())
@@ -50,19 +53,17 @@ class SyncManager(
                 "periodDays" to workout.periodDays,
                 "sleepStart" to workout.sleepStart,
                 "sleepEnd" to workout.sleepEnd,
-                "restTimeMinutes" to workout.restTimeMinutes,
-                "autoRestTime" to workout.autoRestTime,
             ),
             SetOptions.merge(),
         ).await()
 
-        exercises.forEach { exercise ->
-            workoutRef.collection("exercises").document(exercise.id.toString())
+        plan.exercises.forEach { planned ->
+            workoutRef.collection("exercises").document(planned.exercise.id.toString())
                 .set(
                     mapOf(
-                        "name" to exercise.name,
-                        "targetReps" to exercise.targetReps,
-                        "repsPerSet" to exercise.repsPerSet,
+                        "name" to planned.exercise.name,
+                        "repsPerSet" to planned.exercise.repsPerSet,
+                        "dailyTargetReps" to planned.dailyTargetReps,
                     ),
                     SetOptions.merge(),
                 ).await()
@@ -82,19 +83,20 @@ class SyncManager(
             val startDate = (data["startDate"] as? Number)?.toLong() ?: continue
 
             val exerciseSnapshots = doc.reference.collection("exercises").get().await()
-            val exercises = exerciseSnapshots.documents.mapNotNull { exDoc ->
+            val planned = exerciseSnapshots.documents.mapNotNull { exDoc ->
                 val exId = exDoc.id.toIntOrNull() ?: return@mapNotNull null
                 val exData = exDoc.data ?: return@mapNotNull null
-                ExerciseEntity(
+                val exercise = ExerciseEntity(
                     id = exId,
                     name = exData["name"] as? String ?: return@mapNotNull null,
-                    targetReps = (exData["targetReps"] as? Number)?.toInt() ?: 0,
                     repsPerSet = (exData["repsPerSet"] as? Number)?.toInt() ?: 20,
                 )
+                val dailyTargetReps = (exData["dailyTargetReps"] as? Number)?.toInt() ?: 0
+                exercise to dailyTargetReps
             }
 
             database.exerciseDao().let { dao ->
-                exercises.forEach { dao.insert(it) }
+                planned.forEach { dao.insert(it.first) }
             }
             database.workoutDao().run {
                 insert(
@@ -102,16 +104,16 @@ class SyncManager(
                         id = workoutId,
                         name = name,
                         startDate = startDate,
-                        periodDays = (data["periodDays"] as? Number)?.toInt() ?: 7,
-                        sleepStart = data["sleepStart"] as? String ?: "21:00",
+                        periodDays = (data["periodDays"] as? Number)?.toInt() ?: 30,
+                        sleepStart = data["sleepStart"] as? String ?: "22:00",
                         sleepEnd = data["sleepEnd"] as? String ?: "08:00",
-                        restTimeMinutes = (data["restTimeMinutes"] as? Number)?.toInt() ?: 30,
-                        autoRestTime = data["autoRestTime"] as? Boolean ?: false,
                     ),
                 )
                 clearExercises(workoutId)
-                if (exercises.isNotEmpty()) {
-                    insertCrossRefs(exercises.map { WorkoutExerciseCrossRef(workoutId, it.id) })
+                if (planned.isNotEmpty()) {
+                    insertCrossRefs(planned.map { (exercise, dailyTargetReps) ->
+                        WorkoutExerciseCrossRef(workoutId, exercise.id, dailyTargetReps)
+                    })
                 }
             }
         }
@@ -171,9 +173,10 @@ class SyncManager(
     }
 
     suspend fun pushAllToCloud() {
-        val localWorkouts = database.workoutDao().getAllWorkouts().first()
-        localWorkouts.forEach { workout ->
-            pushWorkoutsToCloud(workout.workout, workout.exercises)
+        val workoutEntities = database.workoutDao().getAllWorkouts().first()
+        val rows = database.workoutDao().observePlannedExercises().first()
+        workoutEntities.withPlans(rows).forEach { plan ->
+            pushWorkoutToCloud(plan)
         }
         pushAllProgressToCloud()
     }

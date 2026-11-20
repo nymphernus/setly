@@ -47,7 +47,6 @@ import java.util.Locale
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val month by viewModel.month.collectAsStateWithLifecycle()
@@ -71,14 +70,6 @@ fun HistoryScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "На главный экран",
-                        )
-                    }
                 },
             )
         },

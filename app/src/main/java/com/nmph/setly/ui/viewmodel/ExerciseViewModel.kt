@@ -29,7 +29,6 @@ class ExerciseViewModel(
             dao.insert(
                 ExerciseEntity(
                     name = name,
-                    targetReps = 0,
                     repsPerSet = repsPerSet.coerceAtLeast(1),
                 ),
             )

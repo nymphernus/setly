@@ -30,7 +30,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
@@ -40,7 +40,7 @@ import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
 fun MainScreen(
-    workouts: List<WorkoutWithExercises>,
+    workouts: List<WorkoutPlan>,
     todayWorkouts: List<TodayWorkoutItem> = emptyList(),
     stats: ProfileStats,
     historyViewModel: HistoryViewModel,
@@ -51,17 +51,15 @@ fun MainScreen(
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
-    autoRestEnabled: Boolean,
     snackbarMessage: String? = null,
     onSnackbarShown: () -> Unit = {},
     onAddWorkout: () -> Unit,
     onEditExercise: (Int) -> Unit,
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
-    onDeleteWorkout: (WorkoutWithExercises) -> Unit,
+    onDeleteWorkout: (WorkoutPlan) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
-    onToggleAutoRest: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit,
@@ -72,13 +70,6 @@ fun MainScreen(
     val route = currentRoute?.destination?.route
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val goHome: () -> Unit = {
-        navController.navigate("home") {
-            popUpTo("home") { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
     LaunchedEffect(snackbarMessage) {
         if (snackbarMessage != null) {
             snackbarHostState.showSnackbar(snackbarMessage)
@@ -149,7 +140,6 @@ fun MainScreen(
                     onEditWorkout = onEditWorkout,
                     onDeleteWorkout = onDeleteWorkout,
                     onCreateWorkout = onAddWorkout,
-                    onOpenProfile = { navController.navigate("profile") },
                 )
             }
             composable(
@@ -159,7 +149,6 @@ fun MainScreen(
             ) {
                 ExerciseScreen(
                     viewModel = exerciseViewModel,
-                    onBack = goHome,
                     onEdit = onEditExercise,
                 )
             }
@@ -168,7 +157,7 @@ fun MainScreen(
                 enterTransition = { fadeIn(animationSpec = tween(180)) },
                 exitTransition = { fadeOut(animationSpec = tween(180)) },
             ) {
-                HistoryScreen(viewModel = historyViewModel, onBack = goHome)
+                HistoryScreen(viewModel = historyViewModel)
             }
             composable(
                 "profile",
@@ -183,14 +172,11 @@ fun MainScreen(
                     isSyncing = isSyncing,
                     darkTheme = darkTheme,
                     notificationsEnabled = notificationsEnabled,
-                    autoRestEnabled = autoRestEnabled,
                     onToggleDarkTheme = onToggleDarkTheme,
                     onToggleNotifications = onToggleNotifications,
-                    onToggleAutoRest = onToggleAutoRest,
                     onSignIn = onSignIn,
                     onSync = onSync,
                     onSignOut = onSignOut,
-                    onBack = goHome,
                 )
             }
         }

@@ -76,7 +76,11 @@ private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) 
     var timeLeft by rememberSaveable { mutableStateOf(0) }
     var timerRun by rememberSaveable { mutableStateOf(0) }
     val totalSets = item.totalSets
-    val totalSeconds = DistributionHelper.effectiveRestMinutes(item.workout, totalSets) * 60
+    val totalSeconds = DistributionHelper.restMinutes(
+        item.workout.sleepStart,
+        item.workout.sleepEnd,
+        totalSets,
+    ) * 60
 
     LaunchedEffect(timerRun, totalSeconds) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
@@ -155,7 +159,7 @@ private fun TodayExerciseRow(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${item.completedToday} / ${item.targetForToday}",
+                "${item.completedToday} / ${item.dailyTargetReps}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
