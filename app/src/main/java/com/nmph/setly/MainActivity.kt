@@ -46,14 +46,14 @@ class MainActivity : ComponentActivity() {
                     composable("main") {
                         MainScreen(
                             exercises = exercises,
-                            onAdd = { navController.navigate("add_edit") },
+                            onAdd = { navController.navigate("add_edit/-1") },
                             onEdit = { id -> navController.navigate("add_edit/$id") },
                             onDelete = { viewModel.deleteExercise(it) },
                             onProfile = { navController.navigate("profile") },
                         )
                     }
                     composable(
-                        route = "add_edit/{exerciseId?}",
+                        route = "add_edit/{exerciseId}",
                         arguments = listOf(navArgument("exerciseId") {
                             type = NavType.IntType
                             defaultValue = -1
