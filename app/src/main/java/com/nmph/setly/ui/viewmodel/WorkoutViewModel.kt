@@ -38,6 +38,7 @@ class WorkoutViewModel(
         sleepStart: String,
         sleepEnd: String,
         restTimeMinutes: Int,
+        autoRestTime: Boolean,
         exerciseIds: List<Int>,
     ) {
         viewModelScope.launch {
@@ -50,6 +51,7 @@ class WorkoutViewModel(
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,
                 restTimeMinutes = restTimeMinutes,
+                autoRestTime = autoRestTime,
             )
             // Сначала сохраняем локально (offline-first), затем бэкапим в облако.
             val savedId = workoutDao.saveWorkout(workout, exerciseIds)
@@ -67,8 +69,12 @@ class WorkoutViewModel(
         }
     }
 
-    fun createExercise(name: String, targetReps: Int) {
-        viewModelScope.launch { exerciseDao.insert(ExerciseEntity(name = name, targetReps = targetReps)) }
+    fun createExercise(name: String, targetReps: Int, repsPerSet: Int = 20) {
+        viewModelScope.launch {
+            exerciseDao.insert(
+                ExerciseEntity(name = name, targetReps = targetReps, repsPerSet = repsPerSet),
+            )
+        }
     }
 
     fun syncNow() {

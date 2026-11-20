@@ -55,6 +55,12 @@ object DistributionHelper {
         exercise.id to calculateTargetForToday(workout, exercise, today, progressList)
     }
 
+    // Авто-отдых: 24 часа делим на число подходов за день (300/20 = 15 → 96 минут).
+    fun effectiveRestMinutes(workout: WorkoutEntity, totalSetsPerDay: Int): Int {
+        if (!workout.autoRestTime || totalSetsPerDay <= 0) return workout.restTimeMinutes
+        return (24 * 60) / totalSetsPerDay
+    }
+
     // 300 / 20 → 15 подходов по 20; 50 / 20 → [20, 20, 10].
     fun splitIntoSets(targetReps: Int, repsPerSet: Int): List<Int> {
         require(repsPerSet > 0) { "repsPerSet must be positive" }

@@ -19,6 +19,9 @@ interface ProgressDao {
     @Query("SELECT * FROM progress ORDER BY date DESC")
     suspend fun getAllProgress(): List<ProgressEntity>
 
+    @Query("SELECT * FROM progress")
+    fun observeAllProgress(): Flow<List<ProgressEntity>>
+
     // Upsert вместо insert: повторное нажатие +1/-1 обновляет ту же запись "дата_упражнение".
     @Upsert
     suspend fun insertOrUpdate(progress: ProgressEntity)

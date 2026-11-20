@@ -65,7 +65,10 @@ class TodayViewModel(
                     TodayExerciseItem(
                         exercise = exercise,
                         targetForToday = target,
-                        sets = DistributionHelper.splitIntoSets(target, DistributionHelper.DEFAULT_REPS_PER_SET),
+                        sets = DistributionHelper.splitIntoSets(
+                            target,
+                            exercise.repsPerSet.coerceAtLeast(1),
+                        ),
                         completedSets = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedSets
                             ?: emptyList(),
                     )

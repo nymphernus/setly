@@ -18,9 +18,11 @@ class ExerciseViewModel(private val dao: ExerciseDao) : ViewModel() {
             initialValue = emptyList(),
         )
 
-    fun addExercise(name: String, targetReps: Int) {
+    fun addExercise(name: String, targetReps: Int, repsPerSet: Int = 20) {
         viewModelScope.launch {
-            dao.insert(ExerciseEntity(name = name, targetReps = targetReps))
+            dao.insert(
+                ExerciseEntity(name = name, targetReps = targetReps, repsPerSet = repsPerSet),
+            )
         }
     }
 

@@ -10,4 +10,5 @@ data class ExerciseEntity(
     val name: String,
     // Общее число повторений за всю тренировку; период живёт в WorkoutEntity.
     val targetReps: Int,
+    val repsPerSet: Int = 20, // повторений в одном подходе
 )

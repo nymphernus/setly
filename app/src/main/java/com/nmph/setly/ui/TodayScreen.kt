@@ -8,10 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -20,17 +17,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,13 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nmph.setly.ui.components.RestTimer
+import com.nmph.setly.ui.components.SetPill
 import com.nmph.setly.ui.viewmodel.TodayExerciseItem
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
+import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.delay
 
 @Composable
@@ -83,14 +74,13 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) {
     var timeLeft by remember { mutableStateOf(0) }
-    // Увеличивается при каждом отмеченном подходе — перезапускает отсчёт заново.
     var timerRun by remember { mutableStateOf(0) }
-    val totalSeconds = item.workout.restTimeMinutes.coerceAtLeast(0) * 60
+    val totalSets = item.exercises.sumOf { it.sets.size }
+    val totalSeconds = DistributionHelper.effectiveRestMinutes(item.workout, totalSets) * 60
 
     LaunchedEffect(timerRun) {
-        if (timerRun == 0) return@LaunchedEffect
+        if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
         var remaining = totalSeconds
-        if (remaining == 0) return@LaunchedEffect
         timeLeft = remaining
         while (remaining > 0) {
             delay(1_000)
@@ -116,45 +106,21 @@ private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) 
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically(),
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.shapes.medium,
-                        )
-                        .padding(vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            progress = { timeLeft.toFloat() / totalSeconds },
-                            modifier = Modifier.size(88.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            strokeWidth = 8.dp,
-                        )
-                        Text(
-                            if (timeLeft > 0) "%02d:%02d".format(timeLeft / 60, timeLeft % 60)
-                            else "0:00",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                    Text(
-                        if (timeLeft > 0) "Отдых" else "Отдых окончен!",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
+                RestTimer(timeLeft = timeLeft, totalSeconds = totalSeconds)
             }
 
             item.exercises.forEach { exercise ->
                 TodayExerciseRow(
                     item = exercise,
                     viewModel = viewModel,
-                    onSetChecked = { if (item.workout.restTimeMinutes > 0) timerRun++ },
+                    onSetChecked = { wasChecked ->
+                        if (wasChecked) {
+                            timerRun = 0
+                            timeLeft = 0
+                        } else {
+                            timerRun++
+                        }
+                    },
                 )
             }
         }
@@ -166,7 +132,7 @@ private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) 
 private fun TodayExerciseRow(
     item: TodayExerciseItem,
     viewModel: TodayViewModel,
-    onSetChecked: () -> Unit,
+    onSetChecked: (wasChecked: Boolean) -> Unit,
 ) {
     val done = item.sets.isNotEmpty() && item.completedSets == item.sets
     val rowColor by animateColorAsState(
@@ -202,7 +168,6 @@ private fun TodayExerciseRow(
                 )
             }
         }
-        // FlowRow аккуратно переносит много подходов, не растягивая карточку по высоте.
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -212,59 +177,12 @@ private fun TodayExerciseRow(
                     reps = reps,
                     checked = item.completedSets.getOrNull(index) == reps,
                     onClick = {
+                        val wasChecked = item.completedSets.getOrNull(index) == reps
                         viewModel.toggleSet(item.exercise.id, index)
-                        onSetChecked()
+                        onSetChecked(wasChecked)
                     },
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SetPill(
-    reps: Int,
-    checked: Boolean,
-    onClick: () -> Unit,
-) {
-    val background by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = tween(200),
-        label = "setPillBackground",
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(200),
-        label = "setPillContent",
-    )
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(background)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .clip(CircleShape)
-                .background(if (checked) contentColor else Color.Transparent)
-                .border(2.dp, contentColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (checked) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp),
-                    tint = background,
-                )
-            }
-        }
-        Text("$reps раз", style = MaterialTheme.typography.labelLarge, color = contentColor)
     }
 }

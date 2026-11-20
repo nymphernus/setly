@@ -51,6 +51,7 @@ class SyncManager(
                 "sleepStart" to workout.sleepStart,
                 "sleepEnd" to workout.sleepEnd,
                 "restTimeMinutes" to workout.restTimeMinutes,
+                "autoRestTime" to workout.autoRestTime,
             ),
             SetOptions.merge(),
         ).await()
@@ -58,7 +59,11 @@ class SyncManager(
         exercises.forEach { exercise ->
             workoutRef.collection("exercises").document(exercise.id.toString())
                 .set(
-                    mapOf("name" to exercise.name, "targetReps" to exercise.targetReps),
+                    mapOf(
+                        "name" to exercise.name,
+                        "targetReps" to exercise.targetReps,
+                        "repsPerSet" to exercise.repsPerSet,
+                    ),
                     SetOptions.merge(),
                 ).await()
         }
@@ -84,6 +89,7 @@ class SyncManager(
                     id = exId,
                     name = exData["name"] as? String ?: return@mapNotNull null,
                     targetReps = (exData["targetReps"] as? Number)?.toInt() ?: 0,
+                    repsPerSet = (exData["repsPerSet"] as? Number)?.toInt() ?: 20,
                 )
             }
 
@@ -100,6 +106,7 @@ class SyncManager(
                         sleepStart = data["sleepStart"] as? String ?: "21:00",
                         sleepEnd = data["sleepEnd"] as? String ?: "08:00",
                         restTimeMinutes = (data["restTimeMinutes"] as? Number)?.toInt() ?: 30,
+                        autoRestTime = data["autoRestTime"] as? Boolean ?: false,
                     ),
                 )
                 clearExercises(workoutId)

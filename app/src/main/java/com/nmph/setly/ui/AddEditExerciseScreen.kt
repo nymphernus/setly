@@ -28,12 +28,13 @@ import com.nmph.setly.data.local.ExerciseEntity
 @Composable
 fun AddEditExerciseScreen(
     exercise: ExerciseEntity?,
-    onSave: (name: String, targetReps: Int) -> Unit,
+    onSave: (name: String, targetReps: Int, repsPerSet: Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val name = remember { mutableStateOf(exercise?.name.orEmpty()) }
     val reps = remember { mutableStateOf(exercise?.targetReps?.toString().orEmpty()) }
+    val repsPerSet = remember { mutableStateOf(exercise?.repsPerSet?.toString() ?: "20") }
 
     Scaffold(
         modifier = modifier,
@@ -60,11 +61,15 @@ fun AddEditExerciseScreen(
                 singleLine = true,
             )
             NumberField("Количество повторений", reps.value) { reps.value = it }
+            NumberField("Повторений в подходе", repsPerSet.value) { repsPerSet.value = it }
 
-            val canSave = name.value.isNotBlank() && reps.value.toIntOrNull() != null
+            val canSave = name.value.isNotBlank() && reps.value.toIntOrNull() != null &&
+                (repsPerSet.value.toIntOrNull() ?: 0) > 0
             Button(
                 onClick = {
-                    if (canSave) onSave(name.value.trim(), reps.value.toInt())
+                    if (canSave) {
+                        onSave(name.value.trim(), reps.value.toInt(), repsPerSet.value.toInt())
+                    }
                 },
                 enabled = canSave,
                 modifier = Modifier.fillMaxWidth(),

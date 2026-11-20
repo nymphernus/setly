@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,9 +43,10 @@ fun AddEditWorkoutScreen(
         sleepStart: String,
         sleepEnd: String,
         restTimeMinutes: Int,
+        autoRestTime: Boolean,
         selectedIds: List<Int>,
     ) -> Unit,
-    onCreateExercise: (name: String, reps: Int) -> Unit,
+    onCreateExercise: (name: String, reps: Int, repsPerSet: Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -53,9 +55,11 @@ fun AddEditWorkoutScreen(
     val sleepStart = remember { mutableStateOf(workout?.sleepStart ?: "21:00") }
     val sleepEnd = remember { mutableStateOf(workout?.sleepEnd ?: "08:00") }
     val restMinutes = remember { mutableStateOf(workout?.restTimeMinutes?.toString() ?: "30") }
+    val autoRest = remember { mutableStateOf(workout?.autoRestTime ?: true) }
     val selected = remember { mutableStateOf(initialSelectedIds) }
     val newName = remember { mutableStateOf("") }
     val newReps = remember { mutableStateOf("") }
+    val newRepsPerSet = remember { mutableStateOf("20") }
 
     Scaffold(
         modifier = modifier,
@@ -97,7 +101,16 @@ fun AddEditWorkoutScreen(
                 singleLine = true,
             )
 
-            NumberField("Отдых между подходами (мин)", restMinutes.value) { restMinutes.value = it }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(
+                    checked = autoRest.value,
+                    onCheckedChange = { autoRest.value = it },
+                )
+                Text("Рассчитывать отдых автоматически")
+            }
+            if (!autoRest.value) {
+                NumberField("Отдых между подходами (мин)", restMinutes.value) { restMinutes.value = it }
+            }
 
             Text("Упражнения", style = MaterialTheme.typography.titleMedium)
             LazyColumn(Modifier.weight(1f)) {
@@ -109,7 +122,17 @@ fun AddEditWorkoutScreen(
                                 selected.value = if (checked) selected.value + exercise.id else selected.value - exercise.id
                             },
                         )
-                        Text("${exercise.name} — ${exercise.targetReps} раз")
+                        Text(
+                            "${exercise.name} — ${exercise.targetReps} раз · ${exercise.repsPerSet} в подходе",
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected.value.contains(exercise.id)) {
+                            IconButton(
+                                onClick = { selected.value = selected.value - exercise.id },
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
+                            }
+                        }
                     }
                 }
             }
@@ -126,17 +149,27 @@ fun AddEditWorkoutScreen(
                     value = newReps.value,
                     onValueChange = { newReps.value = it.filter { c -> c.isDigit() } },
                     label = { Text("Повторы") },
-                    modifier = Modifier.weight(0.6f),
+                    modifier = Modifier.weight(0.5f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = newRepsPerSet.value,
+                    onValueChange = { newRepsPerSet.value = it.filter { c -> c.isDigit() } },
+                    label = { Text("В подходе") },
+                    modifier = Modifier.weight(0.5f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 Button(
                     onClick = {
                         val reps = newReps.value.toIntOrNull()
-                        if (newName.value.isNotBlank() && reps != null) {
-                            onCreateExercise(newName.value.trim(), reps)
+                        val perSet = newRepsPerSet.value.toIntOrNull()
+                        if (newName.value.isNotBlank() && reps != null && perSet != null && perSet > 0) {
+                            onCreateExercise(newName.value.trim(), reps, perSet)
                             newName.value = ""
                             newReps.value = ""
+                            newRepsPerSet.value = "20"
                         }
                     },
                 ) { Text("+") }
@@ -153,7 +186,8 @@ fun AddEditWorkoutScreen(
                             period.value.toInt(),
                             sleepStart.value,
                             sleepEnd.value,
-                            restMinutes.value.toInt(),
+                            restMinutes.value.toIntOrNull() ?: 30,
+                            autoRest.value,
                             selected.value.toList(),
                         )
                     }
