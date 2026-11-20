@@ -21,8 +21,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.firebase.firestore.FirebaseFirestore
 import com.nmph.setly.data.auth.AuthManager
 import com.nmph.setly.data.local.AppDatabase
+import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.ui.AddEditExerciseScreen
 import com.nmph.setly.ui.AddEditWorkoutScreen
 import com.nmph.setly.ui.MainScreen
@@ -47,6 +49,7 @@ import androidx.work.WorkManager
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
+    private lateinit var syncManager: SyncManager
     private val signInRequestCode = 1001
     // Уведомления опциональны: отказ пользователя не ломает работу приложения.
     private val requestNotificationPermission =
@@ -54,7 +57,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        authManager = AuthManager(this)
+        syncManager = SyncManager(this, FirebaseFirestore.getInstance())
+        authManager = AuthManager(this, syncManager)
         // Ранняя инициализация БД: падение схемы проявится сразу, а не при первом чтении.
         val database = AppDatabase.getDatabase(this)
 
@@ -78,7 +82,9 @@ class MainActivity : ComponentActivity() {
                     factory = ExerciseViewModelFactory(database.exerciseDao()),
                 )
                 val workoutVM: WorkoutViewModel = viewModel(
-                    factory = WorkoutViewModelFactory(database.workoutDao(), database.exerciseDao()),
+                    factory = WorkoutViewModelFactory(
+                        database.workoutDao(), database.exerciseDao(), syncManager,
+                    ),
                 )
                 val todayVM: TodayViewModel = viewModel(
                     factory = TodayViewModelFactory(
@@ -90,6 +96,8 @@ class MainActivity : ComponentActivity() {
                 )
                 val workouts by workoutVM.workouts.collectAsState()
                 val exercises by exerciseVM.exercises.collectAsState()
+                val lastSyncAt by syncManager.lastSyncAt.collectAsState()
+                val isSyncing by syncManager.isSyncing.collectAsState()
 
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
@@ -159,10 +167,10 @@ class MainActivity : ComponentActivity() {
                         ProfileScreen(
                             isSignedIn = authManager.isSignedIn,
                             email = authManager.currentUser?.email,
+                            lastSyncAt = lastSyncAt,
+                            isSyncing = isSyncing,
                             onSignIn = { authManager.signInWithGoogle(this@MainActivity, signInRequestCode) },
-                            onSync = {
-                                Toast.makeText(this@MainActivity, "Синхронизация скоро", Toast.LENGTH_SHORT).show()
-                            },
+                            onSync = { workoutVM.syncNow() },
                             onSignOut = { authManager.signOut() },
                             onBack = { navController.popBackStack() },
                         )

@@ -18,18 +18,35 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     isSignedIn: Boolean,
     email: String?,
+    lastSyncAt: Long?,
+    isSyncing: Boolean,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val syncText = when {
+        isSyncing -> "Синхронизация..."
+        lastSyncAt != null -> {
+            val time = Instant.ofEpochMilli(lastSyncAt)
+                .atZone(ZoneId.systemDefault())
+                .toLocalTime()
+                .format(DateTimeFormatter.ofPattern("HH:mm"))
+            "Последняя синхронизация: $time"
+        }
+        else -> "Ещё не синхронизировано"
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -49,15 +66,21 @@ fun ProfileScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = if (isSignedIn) "Синхронизировано с Google" else "Локальный режим",
+                text = if (isSignedIn) {
+                    "Синхронизировано с Google (${email.orEmpty()})"
+                } else {
+                    "Локальный режим (войдите для синхронизации)"
+                },
                 style = MaterialTheme.typography.headlineSmall,
             )
             if (isSignedIn) {
-                Text(text = email.orEmpty())
-                Button(onClick = onSync) { Text("Синхронизировать") }
+                Text(syncText, style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onSync, enabled = !isSyncing) {
+                    Text("Синхронизировать сейчас")
+                }
                 Button(onClick = onSignOut) { Text("Выйти") }
             } else {
-                // Вход опционален: приложение уже работает в локальном режиме без аккаунта.
+                // Вход опционален: приложение работает в локальном режиме без аккаунта.
                 Button(onClick = onSignIn) { Text("Войти через Google") }
             }
         }

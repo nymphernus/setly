@@ -8,14 +8,18 @@ import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.data.sync.SyncManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class WorkoutViewModel(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
+    private val syncManager: SyncManager,
 ) : ViewModel() {
     val workouts: StateFlow<List<WorkoutWithExercises>> = workoutDao.getAllWorkouts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -38,38 +42,58 @@ class WorkoutViewModel(
     ) {
         viewModelScope.launch {
             val existing = if (id != -1) workoutDao.getWorkoutById(id)?.workout else null
-            workoutDao.saveWorkout(
-                WorkoutEntity(
-                    id = existing?.id ?: 0,
-                    name = name,
-                    startDate = existing?.startDate ?: System.currentTimeMillis(),
-                    periodDays = periodDays,
-                    sleepStart = sleepStart,
-                    sleepEnd = sleepEnd,
-                    restTimeMinutes = restTimeMinutes,
-                ),
-                exerciseIds,
+            val workout = WorkoutEntity(
+                id = existing?.id ?: 0,
+                name = name,
+                startDate = existing?.startDate ?: System.currentTimeMillis(),
+                periodDays = periodDays,
+                sleepStart = sleepStart,
+                sleepEnd = sleepEnd,
+                restTimeMinutes = restTimeMinutes,
             )
+            // Сначала сохраняем локально (offline-first), затем бэкапим в облако.
+            val savedId = workoutDao.saveWorkout(workout, exerciseIds)
+            val savedExercises = exerciseIds.mapNotNull { exerciseDao.getExerciseById(it) }
+            pushToCloud(workout.copy(id = savedId), savedExercises)
         }
     }
 
     fun deleteWorkout(workout: WorkoutEntity) {
         viewModelScope.launch { workoutDao.delete(workout) }
+        viewModelScope.launch(Dispatchers.IO) {
+            if (syncManager.isSignedIn) {
+                runCatching { syncManager.deleteWorkoutFromCloud(workout.id) }
+            }
+        }
     }
 
     fun createExercise(name: String, targetReps: Int) {
         viewModelScope.launch { exerciseDao.insert(ExerciseEntity(name = name, targetReps = targetReps)) }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (syncManager.isSignedIn) runCatching { syncManager.syncNow() }
+        }
+    }
+
+    private suspend fun pushToCloud(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {
+        if (!syncManager.isSignedIn) return
+        withContext(Dispatchers.IO) {
+            runCatching { syncManager.pushWorkoutsToCloud(workout, exercises) }
+        }
     }
 }
 
 class WorkoutViewModelFactory(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
+    private val syncManager: SyncManager,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(WorkoutViewModel::class.java)) {
-            return WorkoutViewModel(workoutDao, exerciseDao) as T
+            return WorkoutViewModel(workoutDao, exerciseDao, syncManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }

@@ -47,6 +47,7 @@ AGP 9.5.1 по умолчанию использует встроенный Kotl
 - Модель: `WorkoutEntity` (тренировка) ↔ `ExerciseEntity` (упражнения) — many-to-many через `WorkoutExerciseCrossRef`.
 - `ProgressEntity` хранит выполненные подходы `List<Int>` по дате и упражнению (в БД CSV через `Converters`).
 - Google Sign-In опционален и нужен только для бэкапа в Firestore (`users/{uid}`).
+- `data/sync/SyncManager.kt` — push/pull тренировок и упражнений в `users/{uid}/workouts/{workoutId}/exercises/{exerciseId}`; при конфликте облако перезаписывает локальные данные. Отметка времени последней синхронизации хранится в SharedPreferences и показывается в профиле.
 - Навигация: `main` → `workout/{id}` / `exercise/{id}` / `profile`.
 - `utils/DistributionHelper.kt` — расчёт нормы с учётом времени сна (`sleepStart`/`sleepEnd`), `floor`, перенос остатков и `splitIntoSets` (по 20 повторений в подходе).
 - `TodayViewModel` показывает только тренировки, активные на сегодня; чекбоксы подходов на экране «Сегодня».

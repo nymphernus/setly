@@ -8,9 +8,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import com.nmph.setly.data.sync.SyncManager
 import kotlinx.coroutines.tasks.await
 
-class AuthManager(context: Context) {
+class AuthManager(context: Context, private val syncManager: SyncManager? = null) {
     private val appContext = context.applicationContext
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -36,10 +37,11 @@ class AuthManager(context: Context) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).await()
         auth.currentUser?.let { user ->
-            // Отмечаем пользователя в Firestore; перенос данных Room сделаем на следующем этапе.
             firestore.collection("users").document(user.uid)
                 .set(mapOf("email" to user.email, "provider" to "google"))
                 .await()
+            // Подтягиваем данные с других устройств сразу после входа.
+            runCatching { syncManager?.pullFromCloud() }
         }
     }
 

@@ -34,8 +34,9 @@ interface WorkoutDao {
     @Query("SELECT * FROM workouts WHERE id = :workoutId")
     suspend fun getWorkoutById(workoutId: Int): WorkoutWithExercises?
 
+    // Возвращаем итоговый ID: он нужен SyncManager для пути users/{uid}/workouts/{id}.
     @Transaction
-    suspend fun saveWorkout(workout: WorkoutEntity, exerciseIds: List<Int>) {
+    suspend fun saveWorkout(workout: WorkoutEntity, exerciseIds: List<Int>): Int {
         val id = if (workout.id == 0) insert(workout).toInt() else {
             update(workout)
             workout.id
@@ -44,5 +45,6 @@ interface WorkoutDao {
         if (exerciseIds.isNotEmpty()) {
             insertCrossRefs(exerciseIds.map { WorkoutExerciseCrossRef(id, it) })
         }
+        return id
     }
 }
