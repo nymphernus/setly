@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,22 +67,36 @@ private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) 
 
 @Composable
 private fun TodayExerciseRow(item: TodayExerciseItem, viewModel: TodayViewModel) {
-    val done = item.completedToday >= item.targetForToday
-    Row(
+    val done = item.sets.isNotEmpty() && item.completedSets == item.sets
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (done) Modifier.background(Color(0xFFC8E6C9)) else Modifier)
-            .padding(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(8.dp),
     ) {
-        Text(item.exercise.name, modifier = Modifier.weight(1f))
-        Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday - 1) }) {
-            Text("-1")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(item.exercise.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text("${item.completedToday} / ${item.targetForToday}")
+            if (done) {
+                Text("Выполнено", color = Color(0xFF2E7D32), modifier = Modifier.padding(start = 8.dp))
+            }
         }
-        Text("${item.completedToday} / ${item.targetForToday}")
-        Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday + 1) }) {
-            Text("+1")
+        // Много подходов (например, 15) не должны растягивать экран — прокручиваем внутри карточки.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            item.sets.forEachIndexed { index, reps ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = item.completedSets.getOrNull(index) == reps,
+                        onCheckedChange = { viewModel.toggleSet(item.exercise.id, index) },
+                    )
+                    Text("$reps раз")
+                }
+            }
         }
     }
 }

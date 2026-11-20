@@ -68,7 +68,7 @@ class HistoryViewModel(
             }
             if (targets <= 0) continue
             val done = progress.filter { it.date == date.format(DateTimeFormatter.ISO_LOCAL_DATE) }
-                .sumOf { it.completedReps }
+                .sumOf { it.completedSets.sum() }
             result[date] = (done.toFloat() / targets).coerceIn(0f, 1f)
         }
         return result

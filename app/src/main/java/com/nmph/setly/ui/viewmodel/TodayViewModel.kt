@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -23,8 +24,11 @@ import java.time.format.DateTimeFormatter
 data class TodayExerciseItem(
     val exercise: ExerciseEntity,
     val targetForToday: Int,
-    val completedToday: Int,
-)
+    val sets: List<Int>,
+    val completedSets: List<Int>,
+) {
+    val completedToday: Int get() = completedSets.sum()
+}
 
 data class TodayWorkoutItem(
     val workout: WorkoutEntity,
@@ -53,10 +57,13 @@ class TodayViewModel(
             TodayWorkoutItem(
                 workout = workout.workout,
                 exercises = workout.exercises.map { exercise ->
+                    val target = targets[exercise.id] ?: 0
                     TodayExerciseItem(
                         exercise = exercise,
-                        targetForToday = targets[exercise.id] ?: 0,
-                        completedToday = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedReps ?: 0,
+                        targetForToday = target,
+                        sets = DistributionHelper.splitIntoSets(target, DistributionHelper.DEFAULT_REPS_PER_SET),
+                        completedSets = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedSets
+                            ?: emptyList(),
                     )
                 },
             )
@@ -65,28 +72,39 @@ class TodayViewModel(
 
     fun getTodayDate(): String = todayDate
 
-    fun updateProgress(exerciseId: Int, completedReps: Int) {
-        val safeReps = completedReps.coerceAtLeast(0)
-        // Цель нужна только для isCompleted; пересчитываем по первой активной тренировке упражнения.
-        val target = todayWorkouts.value
+    // Чекбокс подхода: добавляем/убираем элемент в позиции setIndex.
+    fun toggleSet(exerciseId: Int, setIndex: Int) {
+        val item = todayWorkouts.value
             .flatMap { it.exercises }
-            .firstOrNull { it.exercise.id == exerciseId }?.targetForToday ?: safeReps
+            .firstOrNull { it.exercise.id == exerciseId } ?: return
+        val reps = item.sets.getOrNull(setIndex) ?: return
+        val current = progress.value.firstOrNull { it.exerciseId == exerciseId }?.completedSets ?: emptyList()
+
+        val updated = if (current.getOrNull(setIndex) == reps) {
+            current.filterIndexed { index, _ -> index != setIndex }
+        } else {
+            current.toMutableList().apply {
+                // Если отметили позже первый подход, предыдущие считаем выполненными.
+                while (size < setIndex) add(item.sets[size])
+                if (size == setIndex) add(reps) else this[setIndex] = reps
+            }.toList()
+        }
+
         viewModelScope.launch {
             progressDao.insertOrUpdate(
                 ProgressEntity(
                     id = "${todayDate}_$exerciseId",
                     date = todayDate,
                     exerciseId = exerciseId,
-                    completedReps = safeReps,
-                    isCompleted = safeReps >= target,
+                    completedSets = updated,
+                    isCompleted = updated == item.sets,
                 ),
             )
         }
     }
 
     private fun WorkoutWithExercises.isActiveOn(date: LocalDate): Boolean {
-        val start = java.time.Instant.ofEpochMilli(workout.startDate)
-            .atZone(ZoneId.systemDefault()).toLocalDate()
+        val start = Instant.ofEpochMilli(workout.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
         return !date.isBefore(start) && !date.isAfter(start.plusDays(workout.periodDays.toLong() - 1))
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -14,9 +15,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
     abstract fun workoutDao(): WorkoutDao
@@ -85,6 +87,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // completedReps (Int) заменяется на completedSets (CSV-строка). Старые счётчики
+        // не переносятся осмысленно в подходы, поэтому записи начинаются с пустого списка.
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `progress_new` (
+                        `id` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `exerciseId` INTEGER NOT NULL,
+                        `completedSets` TEXT NOT NULL,
+                        `isCompleted` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "INSERT INTO `progress_new` (`id`, `date`, `exerciseId`, `completedSets`, `isCompleted`) " +
+                        "SELECT `id`, `date`, `exerciseId`, '', `isCompleted` FROM `progress`",
+                )
+                db.execSQL("DROP TABLE `progress`")
+                db.execSQL("ALTER TABLE `progress_new` RENAME TO `progress`")
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -93,7 +120,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "setly_database",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build().also { INSTANCE = it }
             }
         }

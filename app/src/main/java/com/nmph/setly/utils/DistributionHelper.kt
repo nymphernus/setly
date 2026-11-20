@@ -9,6 +9,9 @@ import java.time.temporal.ChronoUnit
 import kotlin.math.floor
 
 object DistributionHelper {
+    // Пока размер подхода фиксированный; позже можно вынести в настройки упражнения.
+    const val DEFAULT_REPS_PER_SET = 20
+
     // Переход через полночь (21:00 → 08:00) даёт 11 часов, а не -13.
     fun calculateSleepPenalty(workout: WorkoutEntity): Double {
         val start = LocalTime.parse(workout.sleepStart)
@@ -36,7 +39,7 @@ object DistributionHelper {
                 val pastTarget = calculateTargetForToday(
                     workout, exercise, LocalDate.parse(past.date), progressList,
                 )
-                (pastTarget - past.completedReps).coerceAtLeast(0)
+                (pastTarget - past.completedSets.sum()).coerceAtLeast(0)
             }
             .sum()
 
@@ -50,5 +53,20 @@ object DistributionHelper {
         progressList: List<ProgressEntity>,
     ): Map<Int, Int> = exercises.associate { exercise ->
         exercise.id to calculateTargetForToday(workout, exercise, today, progressList)
+    }
+
+    // 300 / 20 → 15 подходов по 20; 50 / 20 → [20, 20, 10].
+    fun splitIntoSets(targetReps: Int, repsPerSet: Int): List<Int> {
+        require(repsPerSet > 0) { "repsPerSet must be positive" }
+        if (targetReps <= 0) return emptyList()
+
+        val result = mutableListOf<Int>()
+        var remaining = targetReps
+        while (remaining > 0) {
+            val current = remaining.coerceAtMost(repsPerSet)
+            result += current
+            remaining -= current
+        }
+        return result
     }
 }
