@@ -20,20 +20,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.nmph.setly.ui.viewmodel.TodayItem
+import com.nmph.setly.ui.viewmodel.TodayExerciseItem
 import com.nmph.setly.ui.viewmodel.TodayViewModel
+import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
 
 @Composable
 fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
-    val items by viewModel.todayItems.collectAsStateWithLifecycle()
+    val workouts by viewModel.todayWorkouts.collectAsStateWithLifecycle()
 
-    if (items.isEmpty()) {
+    if (workouts.isEmpty()) {
         Column(
             modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Нет упражнений на сегодня", style = MaterialTheme.typography.bodyLarge)
+            Text("Нет активных тренировок на сегодня", style = MaterialTheme.typography.bodyLarge)
         }
         return
     }
@@ -43,39 +44,42 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
     ) {
-        items(items, key = { it.exercise.id }) { item ->
-            TodayCard(item, viewModel)
+        items(workouts, key = { it.workout.id }) { workout ->
+            TodayWorkoutCard(workout, viewModel)
         }
     }
 }
 
 @Composable
-private fun TodayCard(item: TodayItem, viewModel: TodayViewModel) {
+private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(item.workout.name, style = MaterialTheme.typography.titleMedium)
+            item.exercises.forEach { exercise ->
+                TodayExerciseRow(exercise, viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayExerciseRow(item: TodayExerciseItem, viewModel: TodayViewModel) {
     val done = item.completedToday >= item.targetForToday
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (done) Modifier.background(Color(0xFFC8E6C9)) else Modifier),
+            .then(if (done) Modifier.background(Color(0xFFC8E6C9)) else Modifier)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(item.exercise.name, style = MaterialTheme.typography.titleMedium)
-            Text("Цель на сегодня: ${item.targetForToday} раз")
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday - 1) }) {
-                    Text("-1")
-                }
-                Text("${item.completedToday} / ${item.targetForToday}")
-                Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday + 1) }) {
-                    Text("+1")
-                }
-                if (done) {
-                    Text("Выполнено", color = Color(0xFF2E7D32), modifier = Modifier.padding(start = 8.dp))
-                }
-            }
+        Text(item.exercise.name, modifier = Modifier.weight(1f))
+        Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday - 1) }) {
+            Text("-1")
+        }
+        Text("${item.completedToday} / ${item.targetForToday}")
+        Button(onClick = { viewModel.updateProgress(item.exercise.id, item.completedToday + 1) }) {
+            Text("+1")
         }
     }
 }

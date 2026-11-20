@@ -28,14 +28,12 @@ import com.nmph.setly.data.local.ExerciseEntity
 @Composable
 fun AddEditExerciseScreen(
     exercise: ExerciseEntity?,
-    onSave: (name: String, targetReps: Int, periodDays: Int, sleepHours: Int) -> Unit,
+    onSave: (name: String, targetReps: Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val name = remember { mutableStateOf(exercise?.name.orEmpty()) }
     val reps = remember { mutableStateOf(exercise?.targetReps?.toString().orEmpty()) }
-    val period = remember { mutableStateOf(exercise?.periodDays?.toString().orEmpty()) }
-    val sleep = remember { mutableStateOf(exercise?.sleepHours?.toString().orEmpty()) }
 
     Scaffold(
         modifier = modifier,
@@ -62,21 +60,11 @@ fun AddEditExerciseScreen(
                 singleLine = true,
             )
             NumberField("Количество повторений", reps.value) { reps.value = it }
-            NumberField("Период в днях", period.value) { period.value = it }
-            NumberField("Часов сна", sleep.value) { sleep.value = it }
 
-            val canSave = name.value.isNotBlank() && reps.value.toIntOrNull() != null &&
-                period.value.toIntOrNull() != null && sleep.value.toIntOrNull() != null
+            val canSave = name.value.isNotBlank() && reps.value.toIntOrNull() != null
             Button(
                 onClick = {
-                    if (canSave) {
-                        onSave(
-                            name.value.trim(),
-                            reps.value.toInt(),
-                            period.value.toInt(),
-                            sleep.value.toInt(),
-                        )
-                    }
+                    if (canSave) onSave(name.value.trim(), reps.value.toInt())
                 },
                 enabled = canSave,
                 modifier = Modifier.fillMaxWidth(),

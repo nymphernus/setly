@@ -8,7 +8,6 @@ data class ExerciseEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
     val name: String,
+    // Общее число повторений за всю тренировку; период живёт в WorkoutEntity.
     val targetReps: Int,
-    val periodDays: Int = 7,
-    val sleepHours: Int = 8,
 )

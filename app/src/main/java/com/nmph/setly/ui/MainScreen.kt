@@ -29,17 +29,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.data.local.WorkoutWithExercises
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    exercises: List<ExerciseEntity>,
+    workouts: List<WorkoutWithExercises>,
     todayViewModel: TodayViewModel,
-    onAdd: () -> Unit,
-    onEdit: (Int) -> Unit,
-    onDelete: (ExerciseEntity) -> Unit,
+    onAddWorkout: () -> Unit,
+    onEditWorkout: (Int) -> Unit,
+    onDeleteWorkout: (WorkoutWithExercises) -> Unit,
     onProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -58,8 +58,8 @@ fun MainScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAdd) {
-                Icon(Icons.Default.Add, contentDescription = "Добавить упражнение")
+            FloatingActionButton(onClick = onAddWorkout) {
+                Icon(Icons.Default.Add, contentDescription = "Добавить тренировку")
             }
         },
     ) { innerPadding ->
@@ -73,30 +73,30 @@ fun MainScreen(
                 Tab(
                     selected = selectedTab.value == 1,
                     onClick = { selectedTab.value = 1 },
-                    text = { Text("Все упражнения") },
+                    text = { Text("Все тренировки") },
                 )
             }
             when (selectedTab.value) {
                 0 -> TodayScreen(viewModel = todayViewModel)
-                1 -> ExerciseList(exercises, onEdit, onDelete)
+                1 -> WorkoutList(workouts, onEditWorkout, onDeleteWorkout)
             }
         }
     }
 }
 
 @Composable
-private fun ExerciseList(
-    exercises: List<ExerciseEntity>,
+private fun WorkoutList(
+    workouts: List<WorkoutWithExercises>,
     onEdit: (Int) -> Unit,
-    onDelete: (ExerciseEntity) -> Unit,
+    onDelete: (WorkoutWithExercises) -> Unit,
 ) {
-    if (exercises.isEmpty()) {
+    if (workouts.isEmpty()) {
         Column(
             Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Пока нет упражнений", style = MaterialTheme.typography.bodyLarge)
+            Text("Пока нет тренировок", style = MaterialTheme.typography.bodyLarge)
         }
     } else {
         LazyColumn(
@@ -104,34 +104,35 @@ private fun ExerciseList(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         ) {
-            items(exercises, key = { it.id }) { exercise ->
-                ExerciseCard(exercise, onEdit, onDelete)
+            items(workouts, key = { it.workout.id }) { workout ->
+                WorkoutCard(workout, onEdit, onDelete)
             }
         }
     }
 }
 
 @Composable
-private fun ExerciseCard(
-    exercise: ExerciseEntity,
+private fun WorkoutCard(
+    item: WorkoutWithExercises,
     onEdit: (Int) -> Unit,
-    onDelete: (ExerciseEntity) -> Unit,
+    onDelete: (WorkoutWithExercises) -> Unit,
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onEdit(exercise.id) },
+            .clickable { onEdit(item.workout.id) },
     ) {
         Column(Modifier.padding(16.dp)) {
+            Text(item.workout.name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = "${exercise.name} — ${exercise.targetReps} раз за ${exercise.periodDays} дней",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = "Сон: ${exercise.sleepHours} ч",
+                "Период: ${item.workout.periodDays} дней · Упражнений: ${item.exercises.size}",
                 style = MaterialTheme.typography.bodySmall,
             )
-            IconButton(onClick = { onDelete(exercise) }) {
+            Text(
+                "Сон: ${item.workout.sleepStart}–${item.workout.sleepEnd}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            IconButton(onClick = { onDelete(item) }) {
                 Icon(Icons.Default.Delete, contentDescription = "Удалить")
             }
         }

@@ -7,6 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -16,6 +19,7 @@ import androidx.navigation.navArgument
 import com.nmph.setly.data.auth.AuthManager
 import com.nmph.setly.data.local.AppDatabase
 import com.nmph.setly.ui.AddEditExerciseScreen
+import com.nmph.setly.ui.AddEditWorkoutScreen
 import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.ProfileScreen
 import com.nmph.setly.ui.theme.SetlyTheme
@@ -23,6 +27,8 @@ import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.TodayViewModelFactory
+import com.nmph.setly.ui.viewmodel.WorkoutViewModel
+import com.nmph.setly.ui.viewmodel.WorkoutViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,47 +46,77 @@ class MainActivity : ComponentActivity() {
         setContent {
             SetlyTheme {
                 val navController = rememberNavController()
-                val factory = ExerciseViewModelFactory(database.exerciseDao())
-                val viewModel: ExerciseViewModel = viewModel(factory = factory)
-                val todayViewModel: TodayViewModel = viewModel(
-                    factory = TodayViewModelFactory(database.exerciseDao(), database.progressDao()),
+                val exerciseVM: ExerciseViewModel = viewModel(
+                    factory = ExerciseViewModelFactory(database.exerciseDao()),
                 )
-                val exercises by viewModel.exercises.collectAsState()
+                val workoutVM: WorkoutViewModel = viewModel(
+                    factory = WorkoutViewModelFactory(database.workoutDao(), database.exerciseDao()),
+                )
+                val todayVM: TodayViewModel = viewModel(
+                    factory = TodayViewModelFactory(
+                        database.workoutDao(), database.exerciseDao(), database.progressDao(),
+                    ),
+                )
+                val workouts by workoutVM.workouts.collectAsState()
+                val exercises by exerciseVM.exercises.collectAsState()
 
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
                         MainScreen(
-                            exercises = exercises,
-                            todayViewModel = todayViewModel,
-                            onAdd = { navController.navigate("add_edit/-1") },
-                            onEdit = { id -> navController.navigate("add_edit/$id") },
-                            onDelete = { viewModel.deleteExercise(it) },
+                            workouts = workouts,
+                            todayViewModel = todayVM,
+                            onAddWorkout = { navController.navigate("workout/-1") },
+                            onEditWorkout = { id -> navController.navigate("workout/$id") },
+                            onDeleteWorkout = { workoutVM.deleteWorkout(it.workout) },
                             onProfile = { navController.navigate("profile") },
                         )
                     }
                     composable(
-                        route = "add_edit/{exerciseId}",
+                        route = "workout/{workoutId}",
+                        arguments = listOf(navArgument("workoutId") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        }),
+                    ) { entry ->
+                        val id = entry.arguments?.getInt("workoutId") ?: -1
+                        var editingWorkout by remember { mutableStateOf<com.nmph.setly.data.local.WorkoutWithExercises?>(null) }
+                        var initialSelected by remember { mutableStateOf(emptySet<Int>()) }
+                        androidx.compose.runtime.LaunchedEffect(id) {
+                            if (id != -1) {
+                                workoutVM.getWorkoutById(id) { found ->
+                                    editingWorkout = found
+                                    initialSelected = found?.exercises?.map { it.id }?.toSet() ?: emptySet()
+                                }
+                            }
+                        }
+                        AddEditWorkoutScreen(
+                            workout = editingWorkout?.workout,
+                            availableExercises = exercises,
+                            initialSelectedIds = initialSelected,
+                            onSave = { name, period, sleepStart, sleepEnd, selectedIds ->
+                                workoutVM.saveWorkout(id, name, period, sleepStart, sleepEnd, selectedIds)
+                                navController.popBackStack()
+                            },
+                            onCreateExercise = { name, reps -> workoutVM.createExercise(name, reps) },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
+                        route = "exercise/{exerciseId}",
                         arguments = listOf(navArgument("exerciseId") {
                             type = NavType.IntType
                             defaultValue = -1
                         }),
-                    ) { backStackEntry ->
-                        val id = backStackEntry.arguments?.getInt("exerciseId") ?: -1
-                        val editing = if (id != -1) viewModel.getExerciseById(id) else null
+                    ) { entry ->
+                        val id = entry.arguments?.getInt("exerciseId") ?: -1
+                        val editing = if (id != -1) exerciseVM.getExerciseById(id) else null
                         AddEditExerciseScreen(
                             exercise = editing,
-                            onSave = { name, reps, period, sleep ->
+                            onSave = { name, reps ->
                                 if (editing == null) {
-                                    viewModel.addExercise(name, reps, period, sleep)
+                                    exerciseVM.addExercise(name, reps)
                                 } else {
-                                    viewModel.updateExercise(
-                                        editing.copy(
-                                            name = name,
-                                            targetReps = reps,
-                                            periodDays = period,
-                                            sleepHours = sleep,
-                                        ),
-                                    )
+                                    exerciseVM.updateExercise(editing.copy(name = name, targetReps = reps))
                                 }
                                 navController.popBackStack()
                             },

@@ -43,13 +43,14 @@ AGP 9.5.1 по умолчанию использует встроенный Kotl
 
 ## Архитектура
 
-- Offline-first: приложение работает без аккаунта, данные хранятся в Room (`data/local/AppDatabase.kt`).
+- Offline-first: приложение работает без аккаунта, данные хранятся в Room (`data/local/AppDatabase.kt`, версия 3).
+- Модель: `WorkoutEntity` (тренировка) ↔ `ExerciseEntity` (упражнения) — many-to-many через `WorkoutExerciseCrossRef`.
+- `ProgressEntity` хранит выполненные повторения по дате и упражнению.
 - Google Sign-In опционален и нужен только для бэкапа в Firestore (`users/{uid}`).
-- Навигация через Compose Navigation: `main` (список) → `add_edit/{id?}` (форма) / `profile`.
-- `ExerciseViewModel` (`ui/viewmodel/`) хранит список упражнений в `StateFlow` через `stateIn`.
-- `utils/DistributionHelper.kt` — расчёт дневной нормы с поправкой на сон и переносом недоделанных повторений.
-- Room: таблицы `exercises` и `progress` (миграция 1→2 без потери данных).
-- `TodayViewModel` объединяет упражнения и прогресс за сегодня через `combine`; экран «Сегодня» — вкладка в `MainScreen`.
+- Навигация: `main` → `workout/{id}` / `exercise/{id}` / `profile`.
+- `utils/DistributionHelper.kt` — расчёт нормы с учётом времени сна (`sleepStart`/`sleepEnd`), `floor` и переноса остатков.
+- `TodayViewModel` показывает только тренировки, активные на сегодня; `MainScreen` — вкладки «Сегодня» и «Все тренировки».
+- Миграции Room 1→2 и 2→3 сохраняют существующие данные (пересоздание таблицы exercises без потери id/name/targetReps).
 
 ## Конфигурация агента
 

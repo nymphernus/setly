@@ -18,16 +18,9 @@ class ExerciseViewModel(private val dao: ExerciseDao) : ViewModel() {
             initialValue = emptyList(),
         )
 
-    fun addExercise(name: String, targetReps: Int, periodDays: Int, sleepHours: Int) {
+    fun addExercise(name: String, targetReps: Int) {
         viewModelScope.launch {
-            dao.insert(
-                ExerciseEntity(
-                    name = name,
-                    targetReps = targetReps,
-                    periodDays = periodDays,
-                    sleepHours = sleepHours,
-                ),
-            )
+            dao.insert(ExerciseEntity(name = name, targetReps = targetReps))
         }
     }
 
