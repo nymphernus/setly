@@ -27,8 +27,9 @@ android {
         applicationId = "com.nmph.setly"
         minSdk = 29
         targetSdk = 34
+        // Первый релиз Setly.
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         // И 64-битные, и 32-битные библиотеки — APK подойдёт для большинства устройств.
         ndk {

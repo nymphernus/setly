@@ -25,13 +25,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.WorkoutEntity
+
+private val SelectedIdsSaver = Saver<MutableState<Set<Int>>, List<Int>>(
+    save = { it.value.toList() },
+    restore = { mutableStateOf(it.toSet()) },
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,27 +60,34 @@ fun AddEditWorkoutScreen(
     autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val name = remember { mutableStateOf(workout?.name.orEmpty()) }
-    val period = remember { mutableStateOf(workout?.periodDays?.toString().orEmpty()) }
-    val sleepStart = remember { mutableStateOf(workout?.sleepStart ?: "21:00") }
-    val sleepEnd = remember { mutableStateOf(workout?.sleepEnd ?: "08:00") }
-    val restMinutes = remember { mutableStateOf(workout?.restTimeMinutes?.toString() ?: "30") }
-    val autoRest = remember { mutableStateOf(workout?.autoRestTime ?: true) }
-    val selected = remember { mutableStateOf(initialSelectedIds) }
-    val newName = remember { mutableStateOf("") }
-    val newReps = remember { mutableStateOf("") }
-    val newRepsPerSet = remember { mutableStateOf("20") }
+    val name = rememberSaveable { mutableStateOf(workout?.name.orEmpty()) }
+    val period = rememberSaveable { mutableStateOf(workout?.periodDays?.toString().orEmpty()) }
+    val sleepStart = rememberSaveable { mutableStateOf(workout?.sleepStart ?: "21:00") }
+    val sleepEnd = rememberSaveable { mutableStateOf(workout?.sleepEnd ?: "08:00") }
+    val restMinutes = rememberSaveable { mutableStateOf(workout?.restTimeMinutes?.toString() ?: "30") }
+    val autoRest = rememberSaveable { mutableStateOf(workout?.autoRestTime ?: true) }
+    val selected = rememberSaveable(saver = SelectedIdsSaver) {
+        mutableStateOf(initialSelectedIds)
+    }
+    val newName = rememberSaveable { mutableStateOf("") }
+    val newReps = rememberSaveable { mutableStateOf("") }
+    val newRepsPerSet = rememberSaveable { mutableStateOf("20") }
+    val initializedWorkoutId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
     val scrollState = rememberScrollState()
 
-    // Данные тренировки приходят асинхронно из ViewModel — синхронизируем поля после загрузки.
+    // Данные приходят асинхронно. Инициализируем поля один раз для конкретной тренировки.
+    // Пока workout == null (загрузка после поворота), не трогаем сохранённый ввод пользователя.
     LaunchedEffect(workout, initialSelectedIds) {
-        name.value = workout?.name.orEmpty()
-        period.value = workout?.periodDays?.toString().orEmpty()
-        sleepStart.value = workout?.sleepStart ?: "21:00"
-        sleepEnd.value = workout?.sleepEnd ?: "08:00"
-        restMinutes.value = workout?.restTimeMinutes?.toString() ?: "30"
-        autoRest.value = workout?.autoRestTime ?: true
+        val loadedWorkout = workout ?: return@LaunchedEffect
+        if (initializedWorkoutId.value == loadedWorkout.id) return@LaunchedEffect
+        name.value = loadedWorkout.name
+        period.value = loadedWorkout.periodDays.toString()
+        sleepStart.value = loadedWorkout.sleepStart
+        sleepEnd.value = loadedWorkout.sleepEnd
+        restMinutes.value = loadedWorkout.restTimeMinutes.toString()
+        autoRest.value = loadedWorkout.autoRestTime
         selected.value = initialSelectedIds
+        initializedWorkoutId.value = loadedWorkout.id
     }
 
     Scaffold(

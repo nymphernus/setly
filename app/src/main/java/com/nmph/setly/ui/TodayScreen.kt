@@ -27,7 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,14 +73,14 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) {
-    var timeLeft by remember { mutableStateOf(0) }
-    var timerRun by remember { mutableStateOf(0) }
+    var timeLeft by rememberSaveable { mutableStateOf(0) }
+    var timerRun by rememberSaveable { mutableStateOf(0) }
     val totalSets = item.exercises.sumOf { it.sets.size }
     val totalSeconds = DistributionHelper.effectiveRestMinutes(item.workout, totalSets) * 60
 
-    LaunchedEffect(timerRun) {
+    LaunchedEffect(timerRun, totalSeconds) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
-        var remaining = totalSeconds
+        var remaining = if (timeLeft > 0) timeLeft else totalSeconds
         timeLeft = remaining
         while (remaining > 0) {
             delay(1_000)

@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,9 +75,9 @@ fun WorkoutDetailScreen(
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
     val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
 
-    var timeLeft by remember { mutableStateOf(0) }
-    var timerRun by remember { mutableStateOf(0) }
-    var showCompleteDialog by remember { mutableStateOf(false) }
+    var timeLeft by rememberSaveable { mutableStateOf(0) }
+    var timerRun by rememberSaveable { mutableStateOf(0) }
+    var showCompleteDialog by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val totalSets = todayItem?.exercises?.sumOf { it.sets.size } ?: 0
@@ -90,9 +91,10 @@ fun WorkoutDetailScreen(
     }
     val autoRestActive = workout?.workout?.autoRestTime == true && autoRestEnabled
 
-    LaunchedEffect(timerRun) {
+    LaunchedEffect(timerRun, totalSeconds) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
-        var remaining = totalSeconds
+        // После поворота экрана продолжаем с сохранённого остатка, а не с полного интервала.
+        var remaining = if (timeLeft > 0) timeLeft else totalSeconds
         timeLeft = remaining
         while (remaining > 0) {
             delay(1_000)
