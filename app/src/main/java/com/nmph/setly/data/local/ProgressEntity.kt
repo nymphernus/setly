@@ -9,7 +9,8 @@ data class ProgressEntity(
     val id: String, // "YYYY-MM-DD_<exerciseId>"
     val date: String,
     val exerciseId: Int,
-    // Выполненные подходы: [20, 20, 10]. В БД хранится строкой через Converters.
+    // Индексы выполненных подходов (0-based): [0, 2] — отмечены 1-й и 3-й подходы.
+    // В БД хранится строкой через Converters.
     val completedSets: List<Int> = emptyList(),
     val isCompleted: Boolean = false,
 )

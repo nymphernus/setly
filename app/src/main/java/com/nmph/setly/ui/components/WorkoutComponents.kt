@@ -142,14 +142,14 @@ fun RestTimer(
         Box(contentAlignment = Alignment.Center) {
             CircularProgressIndicator(
                 progress = { if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds else 0f },
-                modifier = Modifier.size(112.dp),
+                modifier = Modifier.size(160.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeWidth = 8.dp,
             )
             Text(
                 if (timeLeft > 0) "%02d:%02d".format(timeLeft / 60, timeLeft % 60) else "0:00",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }

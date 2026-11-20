@@ -14,7 +14,7 @@ import java.time.LocalDate
 data class ProfileStats(
     val completedWorkouts: Int = 0,
     val streakDays: Int = 0,
-    val totalReps: Int = 0,
+    val totalSets: Int = 0,
 )
 
 class ProfileViewModel(
@@ -40,7 +40,7 @@ class ProfileViewModel(
             ProfileStats(
                 completedWorkouts = completedDates.size,
                 streakDays = streak,
-                totalReps = progress.sumOf { it.completedSets.sum() },
+                totalSets = progress.sumOf { it.completedSets.size },
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileStats())

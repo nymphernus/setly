@@ -75,7 +75,7 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
 private fun TodayWorkoutCard(item: TodayWorkoutItem, viewModel: TodayViewModel) {
     var timeLeft by rememberSaveable { mutableStateOf(0) }
     var timerRun by rememberSaveable { mutableStateOf(0) }
-    val totalSets = item.exercises.sumOf { it.sets.size }
+    val totalSets = item.totalSets
     val totalSeconds = DistributionHelper.effectiveRestMinutes(item.workout, totalSets) * 60
 
     LaunchedEffect(timerRun, totalSeconds) {
@@ -134,7 +134,7 @@ private fun TodayExerciseRow(
     viewModel: TodayViewModel,
     onSetChecked: (wasChecked: Boolean) -> Unit,
 ) {
-    val done = item.sets.isNotEmpty() && item.completedSets == item.sets
+    val done = item.isDone
     val rowColor by animateColorAsState(
         targetValue = if (done) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
@@ -173,7 +173,7 @@ private fun TodayExerciseRow(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item.sets.forEachIndexed { index, reps ->
-                val isChecked = index < item.completedSets.size
+                val isChecked = index in item.completedIndexes
                 SetPill(
                     reps = reps,
                     checked = isChecked,

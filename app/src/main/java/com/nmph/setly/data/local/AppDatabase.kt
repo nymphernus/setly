@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -133,6 +133,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v7: меняется семантика progress.completedSets — теперь это индексы подходов,
+        // а не values повторений. Старые отметки больше не соответствуют новым спискам,
+        // поэтому очищаем только прогресс; тренировки и упражнения сохраняются.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE `progress` SET `completedSets` = '', `isCompleted` = 0")
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -143,6 +152,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                        MIGRATION_6_7,
                     )
                     .build().also { INSTANCE = it }
             }

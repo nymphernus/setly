@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
             SetlyTheme(darkTheme = darkTheme) {
                 val navController = rememberNavController()
                 val exerciseVM: ExerciseViewModel = viewModel(
-                    factory = ExerciseViewModelFactory(database.exerciseDao()),
+                    factory = ExerciseViewModelFactory(database.exerciseDao(), database.workoutDao()),
                 )
                 val workoutVM: WorkoutViewModel = viewModel(
                     factory = WorkoutViewModelFactory(
@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
                             todayWorkouts = todayWorkouts,
                             stats = stats,
                             historyViewModel = historyVM,
+                            exerciseViewModel = exerciseVM,
                             isSignedIn = authManager.isSignedIn,
                             email = authManager.currentUser?.email,
                             lastSyncAt = lastSyncAt,
@@ -154,6 +155,8 @@ class MainActivity : ComponentActivity() {
                             snackbarMessage = snackbarMessage,
                             onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
+                            onAddExercise = { navController.navigate("exercise/-1") },
+                            onEditExercise = { id -> navController.navigate("exercise/$id") },
                             onOpenWorkout = { id -> navController.navigate("workout/$id") },
                             onEditWorkout = { id -> navController.navigate("edit_workout/$id") },
                             onDeleteWorkout = { item ->
@@ -203,10 +206,6 @@ class MainActivity : ComponentActivity() {
                             todayViewModel = todayVM,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate("edit_workout/$id") },
-                            onComplete = {
-                                snackbarMessage = "Тренировка завершена"
-                                navController.popBackStack()
-                            },
                             autoRestEnabled = autoRestEnabled,
                         )
                     }
@@ -220,11 +219,14 @@ class MainActivity : ComponentActivity() {
                         val id = entry.arguments?.getInt("workoutId") ?: -1
                         var editingWorkout by remember { mutableStateOf<WorkoutWithExercises?>(null) }
                         var initialSelected by remember { mutableStateOf(emptySet<Int>()) }
+                        var initialTargets by remember { mutableStateOf(emptyMap<Int, Int>()) }
                         LaunchedEffect(id) {
                             if (id != -1) {
                                 workoutVM.getWorkoutById(id) { found ->
                                     editingWorkout = found
                                     initialSelected = found?.exercises?.map { it.id }?.toSet() ?: emptySet()
+                                    initialTargets = found?.exercises?.associate { it.id to it.targetReps }
+                                        ?: emptyMap()
                                 }
                             }
                         }
@@ -232,17 +234,15 @@ class MainActivity : ComponentActivity() {
                             workout = editingWorkout?.workout,
                             availableExercises = exercises,
                             initialSelectedIds = initialSelected,
-                            onSave = { name, period, sleepStart, sleepEnd, restMinutes, autoRest, selectedIds ->
+                            initialTargets = initialTargets,
+                            onSave = { name, period, sleepStart, sleepEnd, restMinutes, autoRest, targets ->
                                 workoutVM.saveWorkout(
                                     id, name, period, sleepStart, sleepEnd,
-                                    restMinutes, autoRest, selectedIds,
+                                    restMinutes, autoRest, targets,
                                 ) { message ->
                                     snackbarMessage = message
                                     navController.popBackStack()
                                 }
-                            },
-                            onCreateExercise = { name, reps, perSet ->
-                                workoutVM.createExercise(name, reps, perSet)
                             },
                             onBack = { navController.popBackStack() },
                             autoRestEnabled = autoRestEnabled,
@@ -259,13 +259,11 @@ class MainActivity : ComponentActivity() {
                         val editing = if (id != -1) exerciseVM.getExerciseById(id) else null
                         AddEditExerciseScreen(
                             exercise = editing,
-                            onSave = { name, reps, perSet ->
+                            onSave = { name, perSet ->
                                 if (editing == null) {
-                                    exerciseVM.addExercise(name, reps, perSet)
+                                    exerciseVM.addExercise(name, perSet)
                                 } else {
-                                    exerciseVM.updateExercise(
-                                        editing.copy(name = name, targetReps = reps, repsPerSet = perSet),
-                                    )
+                                    exerciseVM.updateExercise(editing.copy(name = name, repsPerSet = perSet))
                                 }
                                 snackbarMessage = "Упражнение сохранено"
                                 navController.popBackStack()

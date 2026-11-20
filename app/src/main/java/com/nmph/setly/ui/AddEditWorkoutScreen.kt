@@ -13,7 +13,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,15 +30,22 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.WorkoutEntity
+import com.nmph.setly.utils.DistributionHelper
 
-private val SelectedIdsSaver = Saver<MutableState<Set<Int>>, List<Int>>(
-    save = { it.value.toList() },
-    restore = { mutableStateOf(it.toSet()) },
+private data class SelectedExerciseInput(
+    val exerciseId: Int,
+    val targetReps: String,
+)
+
+private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInput>>, List<Pair<Int, String>>>(
+    save = { state -> state.value.map { it.exerciseId to it.targetReps } },
+    restore = { saved -> mutableStateOf(saved.map { SelectedExerciseInput(it.first, it.second) }) },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +54,7 @@ fun AddEditWorkoutScreen(
     workout: WorkoutEntity?,
     availableExercises: List<ExerciseEntity>,
     initialSelectedIds: Set<Int> = emptySet(),
+    initialTargets: Map<Int, Int> = emptyMap(),
     onSave: (
         name: String,
         periodDays: Int,
@@ -53,48 +62,48 @@ fun AddEditWorkoutScreen(
         sleepEnd: String,
         restTimeMinutes: Int,
         autoRestTime: Boolean,
-        selectedIds: List<Int>,
+        targets: Map<Int, Int>,
     ) -> Unit,
-    onCreateExercise: (name: String, reps: Int, repsPerSet: Int) -> Unit,
     onBack: () -> Unit,
     autoRestEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val name = rememberSaveable { mutableStateOf(workout?.name.orEmpty()) }
     val period = rememberSaveable { mutableStateOf(workout?.periodDays?.toString().orEmpty()) }
-    val sleepStart = rememberSaveable { mutableStateOf(workout?.sleepStart ?: "21:00") }
-    val sleepEnd = rememberSaveable { mutableStateOf(workout?.sleepEnd ?: "08:00") }
-    val restMinutes = rememberSaveable { mutableStateOf(workout?.restTimeMinutes?.toString() ?: "30") }
-    val autoRest = rememberSaveable { mutableStateOf(workout?.autoRestTime ?: true) }
-    val selected = rememberSaveable(saver = SelectedIdsSaver) {
-        mutableStateOf(initialSelectedIds)
+    val restMinutes = rememberSaveable {
+        mutableStateOf(workout?.restTimeMinutes?.toString() ?: DistributionHelper.DEFAULT_REST_MINUTES.toString())
     }
-    val newName = rememberSaveable { mutableStateOf("") }
-    val newReps = rememberSaveable { mutableStateOf("") }
-    val newRepsPerSet = rememberSaveable { mutableStateOf("20") }
+    val autoRest = rememberSaveable { mutableStateOf(workout?.autoRestTime ?: true) }
+    val selectedExercises = rememberSaveable(saver = SelectedExercisesSaver) {
+        mutableStateOf(emptyList<SelectedExerciseInput>())
+    }
     val initializedWorkoutId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
     val scrollState = rememberScrollState()
 
-    // Данные приходят асинхронно. Инициализируем поля один раз для конкретной тренировки.
-    // Пока workout == null (загрузка после поворота), не трогаем сохранённый ввод пользователя.
-    LaunchedEffect(workout, initialSelectedIds) {
-        val loadedWorkout = workout ?: return@LaunchedEffect
-        if (initializedWorkoutId.value == loadedWorkout.id) return@LaunchedEffect
-        name.value = loadedWorkout.name
-        period.value = loadedWorkout.periodDays.toString()
-        sleepStart.value = loadedWorkout.sleepStart
-        sleepEnd.value = loadedWorkout.sleepEnd
-        restMinutes.value = loadedWorkout.restTimeMinutes.toString()
-        autoRest.value = loadedWorkout.autoRestTime
-        selected.value = initialSelectedIds
-        initializedWorkoutId.value = loadedWorkout.id
+    // Данные приходят асинхронно. Не трогаем сохранённый ввод после поворота экрана.
+    LaunchedEffect(workout, initialSelectedIds, initialTargets, availableExercises) {
+        val incomingId = workout?.id ?: -1
+        if (initializedWorkoutId.value == incomingId) return@LaunchedEffect
+        name.value = workout?.name.orEmpty()
+        period.value = workout?.periodDays?.toString() ?: "30"
+        restMinutes.value = workout?.restTimeMinutes?.toString()
+            ?: DistributionHelper.DEFAULT_REST_MINUTES.toString()
+        autoRest.value = workout?.autoRestTime ?: true
+        selectedExercises.value = initialSelectedIds.map { id ->
+            val stored = initialTargets[id]
+                ?: availableExercises.firstOrNull { it.id == id }?.targetReps
+                ?: 0
+            val value = if (stored > 0) stored else DistributionHelper.DEFAULT_TARGET_REPS
+            SelectedExerciseInput(id, value.toString())
+        }
+        initializedWorkoutId.value = incomingId
     }
 
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(if (workout == null) "Новая тренировка" else "Редактирование") },
+                title = { Text(if (workout == null) "Новая тренировка" else "Редактирование тренировки") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
@@ -112,42 +121,53 @@ fun AddEditWorkoutScreen(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Text(
+                "Тренировка распределяет выбранные упражнения по дням. " +
+                    "Для каждого упражнения задайте общее число повторений за весь период.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             OutlinedTextField(
                 value = name.value,
                 onValueChange = { name.value = it },
-                label = { Text("Название") },
+                label = { Text("Название тренировки") },
+                placeholder = { Text("Например, МаксОтжим") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            NumberField("Период в днях", period.value) { period.value = it }
-            OutlinedTextField(
-                value = sleepStart.value,
-                onValueChange = { sleepStart.value = it.take(5) },
-                label = { Text("Сон начало (HH:mm)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = sleepEnd.value,
-                onValueChange = { sleepEnd.value = it.take(5) },
-                label = { Text("Сон конец (HH:mm)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+            NumberField(
+                label = "Период в днях",
+                value = period.value,
+                placeholder = "30",
+                onChange = { period.value = it },
             )
 
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = autoRest.value,
                     onCheckedChange = { autoRest.value = it },
                 )
-                Text("Рассчитывать отдых автоматически")
+                Column {
+                    Text("Отдых рассчитывать автоматически")
+                    Text(
+                        "24 часа делятся на число подходов в день, максимум ${DistributionHelper.MAX_REST_MINUTES} мин",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (!autoRest.value) {
-                NumberField("Отдых между подходами (мин)", restMinutes.value) { restMinutes.value = it }
+                NumberField(
+                    label = "Отдых между подходами (мин)",
+                    value = restMinutes.value,
+                    placeholder = "30",
+                    onChange = { restMinutes.value = it },
+                )
             }
             if (!autoRestEnabled && workout?.autoRestTime == true) {
                 Text(
-                    "Глобальный автоматический отдых выключен в профиле — используется ручное значение.",
+                    "В профиле выключен автоматический отдых — используется ручное значение.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
@@ -156,92 +176,68 @@ fun AddEditWorkoutScreen(
             Text("Упражнения", style = MaterialTheme.typography.titleMedium)
             if (availableExercises.isEmpty()) {
                 Text(
-                    "Сначала добавьте упражнение ниже, затем выберите его для тренировки.",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Сначала создайте упражнения на вкладке «Упражнения».",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     availableExercises.forEach { exercise ->
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = selected.value.contains(exercise.id),
-                                onCheckedChange = { checked ->
-                                    selected.value = if (checked) {
-                                        selected.value + exercise.id
+                        val input = selectedExercises.value.firstOrNull { it.exerciseId == exercise.id }
+                        ExerciseSelectionRow(
+                            exercise = exercise,
+                            checked = input != null,
+                            targetReps = input?.targetReps.orEmpty(),
+                            onCheckedChange = { checked ->
+                                selectedExercises.value = if (checked) {
+                                    val defaultTarget = if (exercise.targetReps > 0) {
+                                        exercise.targetReps.toString()
                                     } else {
-                                        selected.value - exercise.id
+                                        DistributionHelper.DEFAULT_TARGET_REPS.toString()
                                     }
-                                },
-                            )
-                            Text(
-                                "${exercise.name} — ${exercise.targetReps} раз · ${exercise.repsPerSet} в подходе",
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (selected.value.contains(exercise.id)) {
-                                IconButton(
-                                    onClick = { selected.value = selected.value - exercise.id },
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
+                                    selectedExercises.value + SelectedExerciseInput(exercise.id, defaultTarget)
+                                } else {
+                                    selectedExercises.value.filterNot { it.exerciseId == exercise.id }
                                 }
-                            }
-                        }
+                            },
+                            onTargetChange = { value ->
+                                selectedExercises.value = selectedExercises.value.map {
+                                    if (it.exerciseId == exercise.id) it.copy(targetReps = value) else it
+                                }
+                            },
+                        )
                     }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = newName.value,
-                    onValueChange = { newName.value = it },
-                    label = { Text("Новое упражнение") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
+            val targetsValid = selectedExercises.value.isNotEmpty() &&
+                selectedExercises.value.all { (it.targetReps.toIntOrNull() ?: 0) > 0 }
+            val canSave = name.value.isNotBlank() &&
+                (period.value.toIntOrNull() ?: 0) > 0 &&
+                (restMinutes.value.toIntOrNull() ?: 0) > 0 &&
+                targetsValid
+
+            if (!targetsValid) {
+                Text(
+                    "Выберите хотя бы одно упражнение и укажите положительную цель повторений.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
-                OutlinedTextField(
-                    value = newReps.value,
-                    onValueChange = { newReps.value = it.filter { c -> c.isDigit() } },
-                    label = { Text("Повторы") },
-                    modifier = Modifier.weight(0.5f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = newRepsPerSet.value,
-                    onValueChange = { newRepsPerSet.value = it.filter { c -> c.isDigit() } },
-                    label = { Text("В подходе") },
-                    modifier = Modifier.weight(0.5f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                Button(
-                    onClick = {
-                        val reps = newReps.value.toIntOrNull()
-                        val perSet = newRepsPerSet.value.toIntOrNull()
-                        if (newName.value.isNotBlank() && reps != null && perSet != null && perSet > 0) {
-                            onCreateExercise(newName.value.trim(), reps, perSet)
-                            newName.value = ""
-                            newReps.value = ""
-                            newRepsPerSet.value = "20"
-                        }
-                    },
-                ) { Text("+") }
             }
 
-            val canSave = name.value.isNotBlank() && period.value.toIntOrNull() != null &&
-                restMinutes.value.toIntOrNull() != null &&
-                isTimeValid(sleepStart.value) && isTimeValid(sleepEnd.value)
-            Button(
+            androidx.compose.material3.Button(
                 onClick = {
                     if (canSave) {
                         onSave(
                             name.value.trim(),
                             period.value.toInt(),
-                            sleepStart.value,
-                            sleepEnd.value,
-                            restMinutes.value.toIntOrNull() ?: 30,
+                            workout?.sleepStart ?: "21:00",
+                            workout?.sleepEnd ?: "08:00",
+                            restMinutes.value.toInt(),
                             autoRest.value,
-                            selected.value.toList(),
+                            selectedExercises.value.associate {
+                                it.exerciseId to (it.targetReps.toIntOrNull() ?: 0)
+                            },
                         )
                     }
                 },
@@ -252,20 +248,64 @@ fun AddEditWorkoutScreen(
     }
 }
 
-private fun isTimeValid(value: String): Boolean {
-    val parts = value.split(":")
-    if (parts.size != 2 || parts[0].length != 2 || parts[1].length != 2) return false
-    val h = parts[0].toIntOrNull() ?: return false
-    val m = parts[1].toIntOrNull() ?: return false
-    return h in 0..23 && m in 0..59
+@Composable
+private fun ExerciseSelectionRow(
+    exercise: ExerciseEntity,
+    checked: Boolean,
+    targetReps: String,
+    onCheckedChange: (Boolean) -> Unit,
+    onTargetChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(exercise.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${exercise.repsPerSet} повторений в подходе",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (checked) {
+                    IconButton(onClick = { onCheckedChange(false) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Убрать из тренировки")
+                    }
+                }
+            }
+            if (checked) {
+                NumberField(
+                    label = "Всего повторений за период",
+                    value = targetReps,
+                    placeholder = "300",
+                    onChange = onTargetChange,
+                )
+            }
+        }
+    }
 }
 
 @Composable
-private fun NumberField(label: String, value: String, onChange: (String) -> Unit) {
+private fun NumberField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = { raw -> onChange(raw.filter { it.isDigit() }) },
         label = { Text(label) },
+        placeholder = { Text(placeholder) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

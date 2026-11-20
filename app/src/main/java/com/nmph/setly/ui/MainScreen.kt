@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nmph.setly.data.local.WorkoutWithExercises
+import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
@@ -39,6 +41,7 @@ fun MainScreen(
     todayWorkouts: List<TodayWorkoutItem> = emptyList(),
     stats: ProfileStats,
     historyViewModel: HistoryViewModel,
+    exerciseViewModel: ExerciseViewModel,
     isSignedIn: Boolean,
     email: String?,
     lastSyncAt: Long?,
@@ -49,6 +52,8 @@ fun MainScreen(
     snackbarMessage: String? = null,
     onSnackbarShown: () -> Unit = {},
     onAddWorkout: () -> Unit,
+    onAddExercise: () -> Unit,
+    onEditExercise: (Int) -> Unit,
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
     onDeleteWorkout: (WorkoutWithExercises) -> Unit,
@@ -74,6 +79,7 @@ fun MainScreen(
 
     val items = listOf(
         Triple("home", "Тренировки", Icons.Default.Home),
+        Triple("exercises", "Упражнения", Icons.AutoMirrored.Filled.List),
         Triple("history", "История", Icons.Default.DateRange),
         Triple("profile", "Профиль", Icons.Default.Person),
     )
@@ -83,14 +89,22 @@ fun MainScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            if (route == "home") {
-                FloatingActionButton(
+            when (route) {
+                "home" -> FloatingActionButton(
                     onClick = onAddWorkout,
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить тренировку")
                 }
+                "exercises" -> FloatingActionButton(
+                    onClick = onAddExercise,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Добавить упражнение")
+                }
+                else -> Unit
             }
         },
         bottomBar = {
@@ -128,6 +142,13 @@ fun MainScreen(
                     onEditWorkout = onEditWorkout,
                     onDeleteWorkout = onDeleteWorkout,
                     onCreateWorkout = onAddWorkout,
+                )
+            }
+            composable("exercises") {
+                ExerciseScreen(
+                    viewModel = exerciseViewModel,
+                    onAdd = onAddExercise,
+                    onEdit = onEditExercise,
                 )
             }
             composable("history") {

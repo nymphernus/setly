@@ -39,10 +39,18 @@ class WorkoutViewModel(
         sleepEnd: String,
         restTimeMinutes: Int,
         autoRestTime: Boolean,
-        exerciseIds: List<Int>,
+        exerciseTargets: Map<Int, Int>,
         onResult: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
+            // targetReps задаётся в тренировке, но хранится вместе с упражнением.
+            // Обновляем его до сохранения связей, чтобы расчёт подходов сразу использовал новые цели.
+            exerciseTargets.forEach { (exerciseId, target) ->
+                exerciseDao.getExerciseById(exerciseId)?.let { exercise ->
+                    exerciseDao.update(exercise.copy(targetReps = target.coerceAtLeast(0)))
+                }
+            }
+            val exerciseIds = exerciseTargets.keys.toList()
             val existing = if (id != -1) workoutDao.getWorkoutById(id)?.workout else null
             val isNew = existing == null
             val workout = WorkoutEntity(
@@ -72,14 +80,6 @@ class WorkoutViewModel(
             if (syncManager.isSignedIn) {
                 runCatching { syncManager.deleteWorkoutFromCloud(workout.id) }
             }
-        }
-    }
-
-    fun createExercise(name: String, targetReps: Int, repsPerSet: Int = 20) {
-        viewModelScope.launch {
-            exerciseDao.insert(
-                ExerciseEntity(name = name, targetReps = targetReps, repsPerSet = repsPerSet),
-            )
         }
     }
 

@@ -84,15 +84,21 @@ class HistoryViewModel(
             val active = workouts.filter { it.isActiveOn(date) }
             if (active.isEmpty()) continue
 
-            // Знаменатель — дневные цели, иначе сырой targetReps за весь период не даст 100%.
-            val targets = active.sumOf { workout ->
-                DistributionHelper.calculateTargetsForWorkout(workout.workout, workout.exercises, date, progress)
-                    .values.sum()
+            val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val activeExerciseIds = active.flatMap { it.exercises.map { exercise -> exercise.id } }.toSet()
+
+            // Прогресс считаем в подходах — так календарь соответствует экрану тренировки.
+            val totalSets = active.sumOf { workout ->
+                workout.exercises.sumOf { exercise ->
+                    val daily = DistributionHelper.dailyReps(workout.workout, exercise)
+                    DistributionHelper.getSetsForExercise(exercise, daily).size
+                }
             }
-            if (targets <= 0) continue
-            val done = progress.filter { it.date == date.format(DateTimeFormatter.ISO_LOCAL_DATE) }
-                .sumOf { it.completedSets.sum() }
-            result[date] = (done.toFloat() / targets).coerceIn(0f, 1f)
+            if (totalSets <= 0) continue
+            val doneSets = progress
+                .filter { it.date == dateString && it.exerciseId in activeExerciseIds }
+                .sumOf { it.completedSets.size }
+            result[date] = (doneSets.toFloat() / totalSets).coerceIn(0f, 1f)
         }
         return result
     }

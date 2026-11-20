@@ -26,6 +26,9 @@ interface WorkoutDao {
     @Query("DELETE FROM workout_exercise_cross_ref WHERE workoutId = :workoutId")
     suspend fun clearExercises(workoutId: Int)
 
+    @Query("DELETE FROM workout_exercise_cross_ref WHERE exerciseId = :exerciseId")
+    suspend fun deleteExerciseLinks(exerciseId: Int)
+
     @Transaction
     @Query("SELECT * FROM workouts ORDER BY startDate DESC")
     fun getAllWorkouts(): Flow<List<WorkoutWithExercises>>

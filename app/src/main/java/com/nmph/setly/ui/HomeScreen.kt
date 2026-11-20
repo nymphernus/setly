@@ -169,8 +169,7 @@ private fun WorkoutCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Сон: ${item.workout.sleepStart}–${item.workout.sleepEnd} · " +
-                    "Отдых: ${restLabel(item)}",
+                "Отдых: ${restLabel(item)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -192,11 +191,8 @@ private fun WorkoutCard(
 }
 
 private fun todayProgress(item: TodayWorkoutItem): Float {
-    if (item.exercises.isEmpty()) return 0f
-    val done = item.exercises.count { exercise ->
-        exercise.sets.isNotEmpty() && exercise.completedSets == exercise.sets
-    }
-    return done / item.exercises.size.toFloat()
+    if (item.totalSets == 0) return 0f
+    return item.completedSets / item.totalSets.toFloat()
 }
 
 private fun restLabel(item: WorkoutWithExercises): String = if (item.workout.autoRestTime) {

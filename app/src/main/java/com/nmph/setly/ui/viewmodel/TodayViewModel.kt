@@ -28,16 +28,22 @@ data class TodayExerciseItem(
     val exercise: ExerciseEntity,
     val targetForToday: Int,
     val sets: List<Int>,
-    val completedSets: List<Int>,
+    /** Индексы отмеченных подходов (не значения повторений!). */
+    val completedIndexes: List<Int>,
 ) {
-    val completedToday: Int get() = completedSets.sum()
-    val completedSetsCount: Int get() = completedSets.size
+    val completedToday: Int get() = completedIndexes.sumOf { sets.getOrNull(it) ?: 0 }
+    val completedSetsCount: Int get() = completedIndexes.count { it in sets.indices }
+    val isDone: Boolean get() = sets.isNotEmpty() && completedSetsCount == sets.size
 }
 
 data class TodayWorkoutItem(
     val workout: WorkoutEntity,
     val exercises: List<TodayExerciseItem>,
-)
+) {
+    val totalSets: Int get() = exercises.sumOf { it.sets.size }
+    val completedSets: Int get() = exercises.sumOf { it.completedSetsCount }
+    val isDone: Boolean get() = totalSets > 0 && completedSets == totalSets
+}
 
 class TodayViewModel(
     private val workoutDao: WorkoutDao,
@@ -56,23 +62,18 @@ class TodayViewModel(
 
     val todayWorkouts: StateFlow<List<TodayWorkoutItem>> = combine(workouts, progress) { allWorkouts, progressList ->
         allWorkouts.filter { it.isActiveOn(today) }.map { workout ->
-            val targets = DistributionHelper.calculateTargetsForWorkout(
-                workout.workout, workout.exercises, today, progressList,
-            )
+            val targets = DistributionHelper.calculateTargetsForWorkout(workout.workout, workout.exercises)
             TodayWorkoutItem(
                 workout = workout.workout,
                 exercises = workout.exercises.map { exercise ->
                     val target = targets[exercise.id] ?: 0
+                    val sets = DistributionHelper.getSetsForExercise(exercise, target)
+                    val saved = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedSets.orEmpty()
                     TodayExerciseItem(
                         exercise = exercise,
                         targetForToday = target,
-                        sets = DistributionHelper.getSetsForExercise(
-                            exercise = exercise,
-                            targetRepsForToday = target,
-                            repsPerSet = exercise.repsPerSet,
-                        ),
-                        completedSets = progressList.firstOrNull { it.exerciseId == exercise.id }?.completedSets
-                            ?: emptyList(),
+                        sets = sets,
+                        completedIndexes = saved.filter { it in sets.indices }.distinct(),
                     )
                 },
             )
@@ -81,22 +82,24 @@ class TodayViewModel(
 
     fun getTodayDate(): String = todayDate
 
-    // Чекбокс подхода: добавляем/убираем элемент в позиции setIndex.
+    /**
+     * Переключает один подход по индексу. Отметки независимы: можно снять любой
+     * подход, не затрагивая остальные.
+     */
     fun toggleSet(exerciseId: Int, setIndex: Int) {
         val item = todayWorkouts.value
             .flatMap { it.exercises }
             .firstOrNull { it.exercise.id == exerciseId } ?: return
-        val reps = item.sets.getOrNull(setIndex) ?: return
-        val current = progress.value.firstOrNull { it.exerciseId == exerciseId }?.completedSets ?: emptyList()
+        if (setIndex !in item.sets.indices) return
 
-        val updated = if (setIndex < current.size) {
-            current.filterIndexed { index, _ -> index != setIndex }
+        val current = progress.value
+            .firstOrNull { it.exerciseId == exerciseId }?.completedSets.orEmpty()
+            .filter { it in item.sets.indices }
+            .distinct()
+        val updated = if (setIndex in current) {
+            current - setIndex
         } else {
-            current.toMutableList().apply {
-                // Если отметили позже первый подход, предыдущие считаем выполненными.
-                while (size < setIndex) add(item.sets[size])
-                if (size == setIndex) add(reps) else this[setIndex] = reps
-            }.toList()
+            (current + setIndex).sorted()
         }
 
         val updatedProgress = ProgressEntity(
@@ -104,10 +107,9 @@ class TodayViewModel(
             date = todayDate,
             exerciseId = exerciseId,
             completedSets = updated,
-            isCompleted = updated == item.sets,
+            isCompleted = updated.size == item.sets.size,
         )
         viewModelScope.launch {
-            // Сначала Room, затем бэкап в облако в фоновом потоке.
             progressDao.insertOrUpdate(updatedProgress)
             if (syncManager.isSignedIn) {
                 withContext(Dispatchers.IO) {
@@ -117,30 +119,8 @@ class TodayViewModel(
         }
     }
 
-    // Завершение тренировки: все подходы на сегодня отмечаются выполненными.
-    fun completeWorkout(workoutId: Int, onComplete: () -> Unit) {
-        val todayItem = todayWorkouts.value.firstOrNull { it.workout.id == workoutId } ?: return
-        val records = todayItem.exercises.map { item ->
-            ProgressEntity(
-                id = "${todayDate}_${item.exercise.id}",
-                date = todayDate,
-                exerciseId = item.exercise.id,
-                completedSets = item.sets,
-                isCompleted = true,
-            )
-        }
-        viewModelScope.launch {
-            records.forEach { progressDao.insertOrUpdate(it) }
-            if (syncManager.isSignedIn) {
-                withContext(Dispatchers.IO) {
-                    records.forEach { record ->
-                        runCatching { syncManager.pushProgressToCloud(record) }
-                    }
-                }
-            }
-            onComplete()
-        }
-    }
+    fun isWorkoutComplete(workoutId: Int): Boolean =
+        todayWorkouts.value.firstOrNull { it.workout.id == workoutId }?.isDone == true
 
     private fun WorkoutWithExercises.isActiveOn(date: LocalDate): Boolean {
         val start = Instant.ofEpochMilli(workout.startDate).atZone(ZoneId.systemDefault()).toLocalDate()

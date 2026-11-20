@@ -1,77 +1,47 @@
 package com.nmph.setly.utils
 
 import com.nmph.setly.data.local.ExerciseEntity
-import com.nmph.setly.data.local.ProgressEntity
 import com.nmph.setly.data.local.WorkoutEntity
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.temporal.ChronoUnit
-import kotlin.math.floor
+import kotlin.math.ceil
 
+/**
+ * Распределение повторений по дням и расчёт отдыха.
+ *
+ * Правила (единый источник истины для всех экранов):
+ * 1. Дневная норма = ceil(targetReps / periodDays).
+ * 2. Подходы дня = дневная норма, разбитая на куски по repsPerSet.
+ * 3. Отдых = (24 * 60) / число подходов дня, но не больше MAX_REST_MINUTES.
+ */
 object DistributionHelper {
-    // Пока размер подхода фиксированный; позже можно вынести в настройки упражнения.
     const val DEFAULT_REPS_PER_SET = 20
+    const val DEFAULT_TARGET_REPS = 300
+    const val DEFAULT_REST_MINUTES = 30
+    const val MAX_REST_MINUTES = 120
 
-    // Переход через полночь (21:00 → 08:00) даёт 11 часов, а не -13.
-    fun calculateSleepPenalty(workout: WorkoutEntity): Double {
-        val start = LocalTime.parse(workout.sleepStart)
-        val end = LocalTime.parse(workout.sleepEnd)
-        var minutes = ChronoUnit.MINUTES.between(start, end)
-        if (minutes < 0) minutes += 24 * 60
-        val hours = minutes / 60.0
-        return if (hours < 7) 0.8 else 1.1
+    /** Целочисленный аналог ceil(a / b) без ошибок округления Double. */
+    private fun ceilDiv(value: Int, divisor: Int): Int =
+        if (divisor <= 0) 0 else (value + divisor - 1) / divisor
+
+    /** Сколько повторений нужно сделать в один день тренировки. */
+    fun dailyReps(workout: WorkoutEntity, exercise: ExerciseEntity): Int {
+        if (exercise.targetReps <= 0) return 0
+        return ceilDiv(exercise.targetReps, workout.periodDays.coerceAtLeast(1))
     }
 
-    fun calculateTargetForToday(
-        workout: WorkoutEntity,
-        exercise: ExerciseEntity,
-        today: LocalDate,
-        progressList: List<ProgressEntity>,
-    ): Int {
-        val safePeriod = workout.periodDays.coerceAtLeast(1)
-        val base = exercise.targetReps.toDouble() / safePeriod
-        // floor, чтобы не перегружать пользователя: 7.85 → 7.
-        val dailyTarget = floor(base * calculateSleepPenalty(workout)).toInt()
-
-        val carryOver = progressList
-            .filter { it.date < today.toString() && it.exerciseId == exercise.id }
-            .map { past ->
-                val pastTarget = calculateTargetForToday(
-                    workout, exercise, LocalDate.parse(past.date), progressList,
-                )
-                (pastTarget - past.completedSets.sum()).coerceAtLeast(0)
-            }
-            .sum()
-
-        return dailyTarget + carryOver
-    }
-
+    /** Совместимость с экранами, которые работают с картой целей по упражнениям. */
     fun calculateTargetsForWorkout(
         workout: WorkoutEntity,
         exercises: List<ExerciseEntity>,
-        today: LocalDate,
-        progressList: List<ProgressEntity>,
-    ): Map<Int, Int> = exercises.associate { exercise ->
-        exercise.id to calculateTargetForToday(workout, exercise, today, progressList)
-    }
+    ): Map<Int, Int> = exercises.associate { it.id to dailyReps(workout, it) }
 
-    // Авто-отдых: 24 часа делим на число подходов за день (300/20 = 15 → 96 минут).
-    // autoRestEnabled — глобальная настройка из профиля; она может отключить авто-расчёт везде.
-    fun effectiveRestMinutes(
-        workout: WorkoutEntity,
-        totalSetsPerDay: Int,
-        autoRestEnabled: Boolean = true,
-    ): Int {
-        if (!workout.autoRestTime || !autoRestEnabled) return workout.restTimeMinutes
-        if (totalSetsPerDay <= 0) return 30
-        return (24 * 60) / totalSetsPerDay
-    }
-
-    // Подходы для упражнения: 50 / 20 → [20, 20, 10].
+    /**
+     * Подходы для дневной нормы: 43 повторения при repsPerSet = 20 → [20, 20, 3].
+     * Значение 10 при repsPerSet = 20 → [10] (один укороченный подход).
+     */
     fun getSetsForExercise(
         exercise: ExerciseEntity,
         targetRepsForToday: Int,
-        repsPerSet: Int,
+        repsPerSet: Int = exercise.repsPerSet,
     ): List<Int> {
         val safeRepsPerSet = when {
             repsPerSet > 0 -> repsPerSet
@@ -81,7 +51,6 @@ object DistributionHelper {
         return splitIntoSets(targetRepsForToday, safeRepsPerSet)
     }
 
-    // 300 / 20 → 15 подходов по 20; 50 / 20 → [20, 20, 10].
     fun splitIntoSets(targetReps: Int, repsPerSet: Int): List<Int> {
         require(repsPerSet > 0) { "repsPerSet must be positive" }
         if (targetReps <= 0) return emptyList()
@@ -94,5 +63,24 @@ object DistributionHelper {
             remaining -= current
         }
         return result
+    }
+
+    /**
+     * Отдых между подходами в минутах.
+     *
+     * totalSetsPerDay — количество подходов на сегодня, а не общее число повторений.
+     * 15 подходов → 96 минут; 1 подход → 120 минут (ограничение сверху).
+     */
+    fun effectiveRestMinutes(
+        workout: WorkoutEntity,
+        totalSetsPerDay: Int,
+        autoRestEnabled: Boolean = true,
+    ): Int {
+        val minutes = if (workout.autoRestTime && autoRestEnabled) {
+            if (totalSetsPerDay <= 0) DEFAULT_REST_MINUTES else (24 * 60) / totalSetsPerDay
+        } else {
+            workout.restTimeMinutes
+        }
+        return minutes.coerceIn(1, MAX_REST_MINUTES)
     }
 }

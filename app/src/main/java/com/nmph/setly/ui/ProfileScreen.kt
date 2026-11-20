@@ -168,7 +168,7 @@ fun ProfileScreen(
         // Статистика
         item {
             Text("Статистика", style = MaterialTheme.typography.titleMedium)
-            if (stats.completedWorkouts == 0 && stats.streakDays == 0 && stats.totalReps == 0) {
+            if (stats.completedWorkouts == 0 && stats.streakDays == 0 && stats.totalSets == 0) {
                 Text(
                     "Начните отмечать подходы — здесь появится ваша статистика.",
                     style = MaterialTheme.typography.bodySmall,
@@ -193,8 +193,8 @@ fun ProfileScreen(
                 )
                 StatCard(
                     icon = Icons.Default.FitnessCenter,
-                    label = "Всего повторений",
-                    value = stats.totalReps.toString(),
+                    label = "Всего подходов",
+                    value = stats.totalSets.toString(),
                     modifier = Modifier.weight(1f),
                 )
             }
