@@ -19,24 +19,32 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.ui.viewmodel.TodayViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     exercises: List<ExerciseEntity>,
+    todayViewModel: TodayViewModel,
     onAdd: () -> Unit,
     onEdit: (Int) -> Unit,
     onDelete: (ExerciseEntity) -> Unit,
     onProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedTab = remember { mutableStateOf(0) }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -55,23 +63,49 @@ fun MainScreen(
             }
         },
     ) { innerPadding ->
-        if (exercises.isEmpty()) {
-            Column(
-                Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text("Пока нет упражнений", style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.fillMaxSize().padding(innerPadding)) {
+            TabRow(selectedTabIndex = selectedTab.value) {
+                Tab(
+                    selected = selectedTab.value == 0,
+                    onClick = { selectedTab.value = 0 },
+                    text = { Text("Сегодня") },
+                )
+                Tab(
+                    selected = selectedTab.value == 1,
+                    onClick = { selectedTab.value = 1 },
+                    text = { Text("Все упражнения") },
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            ) {
-                items(exercises, key = { it.id }) { exercise ->
-                    ExerciseCard(exercise, onEdit, onDelete)
-                }
+            when (selectedTab.value) {
+                0 -> TodayScreen(viewModel = todayViewModel)
+                1 -> ExerciseList(exercises, onEdit, onDelete)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseList(
+    exercises: List<ExerciseEntity>,
+    onEdit: (Int) -> Unit,
+    onDelete: (ExerciseEntity) -> Unit,
+) {
+    if (exercises.isEmpty()) {
+        Column(
+            Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("Пока нет упражнений", style = MaterialTheme.typography.bodyLarge)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        ) {
+            items(exercises, key = { it.id }) { exercise ->
+                ExerciseCard(exercise, onEdit, onDelete)
             }
         }
     }

@@ -21,6 +21,8 @@ import com.nmph.setly.ui.ProfileScreen
 import com.nmph.setly.ui.theme.SetlyTheme
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
+import com.nmph.setly.ui.viewmodel.TodayViewModel
+import com.nmph.setly.ui.viewmodel.TodayViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,12 +42,16 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val factory = ExerciseViewModelFactory(database.exerciseDao())
                 val viewModel: ExerciseViewModel = viewModel(factory = factory)
+                val todayViewModel: TodayViewModel = viewModel(
+                    factory = TodayViewModelFactory(database.exerciseDao(), database.progressDao()),
+                )
                 val exercises by viewModel.exercises.collectAsState()
 
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
                         MainScreen(
                             exercises = exercises,
+                            todayViewModel = todayViewModel,
                             onAdd = { navController.navigate("add_edit/-1") },
                             onEdit = { id -> navController.navigate("add_edit/$id") },
                             onDelete = { viewModel.deleteExercise(it) },

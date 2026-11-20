@@ -47,7 +47,9 @@ AGP 9.5.1 по умолчанию использует встроенный Kotl
 - Google Sign-In опционален и нужен только для бэкапа в Firestore (`users/{uid}`).
 - Навигация через Compose Navigation: `main` (список) → `add_edit/{id?}` (форма) / `profile`.
 - `ExerciseViewModel` (`ui/viewmodel/`) хранит список упражнений в `StateFlow` через `stateIn`.
-- `utils/DistributionHelper.kt` — заготовка под расчёт подходов с учётом сна.
+- `utils/DistributionHelper.kt` — расчёт дневной нормы с поправкой на сон и переносом недоделанных повторений.
+- Room: таблицы `exercises` и `progress` (миграция 1→2 без потери данных).
+- `TodayViewModel` объединяет упражнения и прогресс за сегодня через `combine`; экран «Сегодня» — вкладка в `MainScreen`.
 
 ## Конфигурация агента
 
