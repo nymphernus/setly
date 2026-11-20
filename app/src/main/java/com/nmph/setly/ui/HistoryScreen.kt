@@ -14,9 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,11 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -38,35 +39,43 @@ import java.util.Locale
 fun HistoryScreen(viewModel: HistoryViewModel, modifier: Modifier = Modifier) {
     val month by viewModel.month.collectAsStateWithLifecycle()
     val progress by viewModel.dayProgress.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val monthTitle = month.month.getDisplayName(TextStyle.FULL, Locale("ru"))
         .replaceFirstChar { it.uppercase(Locale("ru")) } + " " + month.year
+    val weekDayLabels = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+    val today = LocalDate.now()
 
     Column(modifier.fillMaxSize().padding(16.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             IconButton(onClick = { viewModel.prevMonth() }) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Предыдущий месяц")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Предыдущий месяц")
             }
             Text(monthTitle, style = MaterialTheme.typography.titleLarge)
             IconButton(onClick = { viewModel.nextMonth() }) {
-                Icon(Icons.Filled.ArrowForward, contentDescription = "Следующий месяц")
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Следующий месяц")
             }
         }
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(7) { index ->
-                val label = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")[index]
-                Text(label, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(
+                    weekDayLabels[index],
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (index >= 5) MaterialTheme.colorScheme.tertiary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             // Смещение: java.time недели начинаются с понедельника (1 = Пн).
             items(month.atDay(1).dayOfWeek.value - 1) {
@@ -75,17 +84,29 @@ fun HistoryScreen(viewModel: HistoryViewModel, modifier: Modifier = Modifier) {
             items(month.lengthOfMonth()) { index ->
                 val date = month.atDay(index + 1)
                 val ratio = progress[date]
-                val color = when {
-                    ratio == null || ratio == 0f -> Color(0xFFE0E0E0)
-                    ratio < 0.5f -> Color(0xFFFFCDD2)
-                    ratio < 1f -> Color(0xFFFFF59D)
-                    else -> Color(0xFFA5D6A7)
+                val isWeekend = date.dayOfWeek.value >= 6
+                val cellColor = when {
+                    ratio == null || ratio == 0f -> MaterialTheme.colorScheme.surfaceVariant
+                    ratio < 0.5f -> MaterialTheme.colorScheme.errorContainer
+                    ratio < 1f -> MaterialTheme.colorScheme.tertiaryContainer
+                    else -> MaterialTheme.colorScheme.primaryContainer
+                }
+                val textColor = when {
+                    date == today -> MaterialTheme.colorScheme.primary
+                    ratio == null -> if (isWeekend) MaterialTheme.colorScheme.tertiary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.onSurface
                 }
                 Box(
                     modifier = Modifier
                         .aspectRatio(1f)
-                        .background(color, androidx.compose.foundation.shape.CircleShape)
-                        .border(1.dp, Color.LightGray, androidx.compose.foundation.shape.CircleShape)
+                        .background(cellColor, RoundedCornerShape(12.dp))
+                        .border(
+                            width = if (date == today) 2.dp else 1.dp,
+                            color = if (date == today) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(12.dp),
+                        )
                         .clickable {
                             val text = if (ratio == null) {
                                 "${date.format(DateTimeFormatter.ofPattern("d MMMM", Locale("ru")))}: нет данных"
@@ -96,7 +117,11 @@ fun HistoryScreen(viewModel: HistoryViewModel, modifier: Modifier = Modifier) {
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(date.dayOfMonth.toString())
+                    Text(
+                        date.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = textColor,
+                    )
                 }
             }
         }

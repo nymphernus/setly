@@ -1,8 +1,12 @@
 package com.nmph.setly.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -49,6 +54,7 @@ fun MainScreen(
 
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Мои тренировки") },
@@ -60,13 +66,21 @@ fun MainScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddWorkout) {
+            FloatingActionButton(
+                onClick = onAddWorkout,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить тренировку")
             }
         },
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            TabRow(selectedTabIndex = selectedTab.value) {
+            TabRow(
+                selectedTabIndex = selectedTab.value,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) {
                 Tab(
                     selected = selectedTab.value == 0,
                     onClick = { selectedTab.value = 0 },
@@ -83,10 +97,16 @@ fun MainScreen(
                     text = { Text("История") },
                 )
             }
-            when (selectedTab.value) {
-                0 -> TodayScreen(viewModel = todayViewModel)
-                1 -> WorkoutList(workouts, onEditWorkout, onDeleteWorkout)
-                2 -> HistoryScreen(viewModel = historyViewModel)
+            Crossfade(
+                targetState = selectedTab.value,
+                animationSpec = tween(durationMillis = 300),
+                label = "mainTabContent",
+            ) { tab ->
+                when (tab) {
+                    0 -> TodayScreen(viewModel = todayViewModel)
+                    1 -> WorkoutList(workouts, onEditWorkout, onDeleteWorkout)
+                    2 -> HistoryScreen(viewModel = historyViewModel)
+                }
             }
         }
     }
@@ -104,13 +124,17 @@ private fun WorkoutList(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Пока нет тренировок", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Пока нет тренировок",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(16.dp),
         ) {
             items(workouts, key = { it.workout.id }) { workout ->
                 WorkoutCard(workout, onEdit, onDelete)
@@ -129,20 +153,41 @@ private fun WorkoutCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEdit(item.workout.id) },
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(item.workout.name, style = MaterialTheme.typography.bodyLarge)
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    item.workout.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { onDelete(item) }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Удалить",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
             Text(
                 "Период: ${item.workout.periodDays} дней · Упражнений: ${item.exercises.size}",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Сон: ${item.workout.sleepStart}–${item.workout.sleepEnd}",
+                "Сон: ${item.workout.sleepStart}–${item.workout.sleepEnd} · Отдых: ${item.workout.restTimeMinutes} мин",
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            IconButton(onClick = { onDelete(item) }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить")
-            }
         }
     }
 }

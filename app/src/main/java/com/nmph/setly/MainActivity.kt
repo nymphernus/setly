@@ -29,6 +29,7 @@ import com.nmph.setly.ui.AddEditExerciseScreen
 import com.nmph.setly.ui.AddEditWorkoutScreen
 import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.ProfileScreen
+import com.nmph.setly.ui.SplashScreen
 import com.nmph.setly.ui.theme.SetlyTheme
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
@@ -101,7 +102,16 @@ class MainActivity : ComponentActivity() {
                 val lastSyncAt by syncManager.lastSyncAt.collectAsState()
                 val isSyncing by syncManager.isSyncing.collectAsState()
 
-                NavHost(navController = navController, startDestination = "main") {
+                NavHost(navController = navController, startDestination = "splash") {
+                    composable("splash") {
+                        SplashScreen(
+                            onDone = {
+                                navController.navigate("main") {
+                                    popUpTo("splash") { inclusive = true }
+                                }
+                            },
+                        )
+                    }
                     composable("main") {
                         MainScreen(
                             workouts = workouts,
