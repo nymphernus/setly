@@ -42,6 +42,9 @@ class WorkoutViewModel(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
+        availableTimeMinutes: Int,
+        notificationsEnabled: Boolean,
+        remindBeforeMinutes: Int,
         settings: List<WorkoutExerciseSettings>,
         onResult: (String) -> Unit = {},
     ) {
@@ -55,6 +58,9 @@ class WorkoutViewModel(
                 periodDays = periodDays,
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,
+                availableTimeMinutes = availableTimeMinutes.coerceAtLeast(1),
+                notificationsEnabled = notificationsEnabled,
+                remindBeforeMinutes = remindBeforeMinutes.coerceAtLeast(1),
             )
             val links = settings.map { item ->
                 WorkoutExerciseCrossRef(

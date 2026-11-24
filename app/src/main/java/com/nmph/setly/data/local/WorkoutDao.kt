@@ -37,7 +37,9 @@ interface WorkoutDao {
         SELECT cr.workoutId AS workoutId,
                e.id AS id,
                e.name AS name,
-               e.description AS description,
+               e.category AS category,
+               e.unit AS unit,
+               e.iconResName AS iconResName,
                cr.repsPerSet AS repsPerSet,
                cr.dailyTargetReps AS dailyTargetReps
         FROM workout_exercise_cross_ref cr

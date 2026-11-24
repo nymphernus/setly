@@ -78,7 +78,7 @@ class TodayViewModel(
                 TodayWorkoutItem(
                     workout = plan.workout,
                     exercises = plan.exercises.map { planned ->
-                        val sets = DistributionHelper.setsForPlan(planned)
+                        val sets = DistributionHelper.setsForPlan(planned, plan.workout)
                         val saved = progressList
                             .firstOrNull { it.exerciseId == planned.exercise.id }
                             ?.completedSets

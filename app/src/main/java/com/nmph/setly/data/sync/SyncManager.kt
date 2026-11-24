@@ -66,6 +66,9 @@ class SyncManager(
                     "periodDays" to workout.periodDays,
                     "sleepStart" to workout.sleepStart,
                     "sleepEnd" to workout.sleepEnd,
+                    "availableTimeMinutes" to workout.availableTimeMinutes,
+                    "notificationsEnabled" to workout.notificationsEnabled,
+                    "remindBeforeMinutes" to workout.remindBeforeMinutes,
                 ),
                 SetOptions.merge(),
             ).await()
@@ -77,7 +80,9 @@ class SyncManager(
                     .set(
                         mapOf(
                             "name" to planned.exercise.name,
-                            "description" to planned.exercise.description,
+                            "category" to planned.exercise.category,
+                            "unit" to planned.exercise.unit,
+                            "iconResName" to planned.exercise.iconResName,
                             "repsPerSet" to planned.repsPerSet,
                             "dailyTargetReps" to planned.dailyTargetReps,
                         ),
@@ -110,7 +115,9 @@ class SyncManager(
                 val exercise = ExerciseEntity(
                     id = exId,
                     name = exData["name"] as? String ?: return@mapNotNull null,
-                    description = exData["description"] as? String ?: "",
+                    category = exData["category"] as? String ?: ExerciseEntity.DEFAULT_CATEGORY,
+                    unit = exData["unit"] as? String ?: ExerciseEntity.DEFAULT_UNIT,
+                    iconResName = exData["iconResName"] as? String ?: ExerciseEntity.DEFAULT_ICON,
                 )
                 val dailyTargetReps = (exData["dailyTargetReps"] as? Number)?.toInt() ?: 0
                 val repsPerSet = (exData["repsPerSet"] as? Number)?.toInt()
@@ -130,6 +137,11 @@ class SyncManager(
                         periodDays = (data["periodDays"] as? Number)?.toInt() ?: 30,
                         sleepStart = data["sleepStart"] as? String ?: "22:00",
                         sleepEnd = data["sleepEnd"] as? String ?: "08:00",
+                        availableTimeMinutes = (data["availableTimeMinutes"] as? Number)?.toInt()
+                            ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES,
+                        notificationsEnabled = data["notificationsEnabled"] as? Boolean ?: true,
+                        remindBeforeMinutes = (data["remindBeforeMinutes"] as? Number)?.toInt()
+                            ?: WorkoutEntity.DEFAULT_REMIND_BEFORE_MINUTES,
                     ),
                 )
                 clearExercises(workoutId)

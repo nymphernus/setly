@@ -259,13 +259,12 @@ fun WorkoutDetailScreen(
             } else {
                 items(workout.exercises, key = { it.exercise.id }) { planned ->
                     val todayExercise = todayExercises[planned.exercise.id]
+                    val plannedSets = DistributionHelper.setsForPlan(planned, workout.workout)
                     ExerciseSetsCard(
                         name = planned.exercise.name,
-                        description = planned.exercise.description,
                         dailyTargetReps = planned.dailyTargetReps,
-                        repsPerSet = planned.repsPerSet,
-                        sets = todayExercise?.sets
-                            ?: DistributionHelper.setsForDay(planned.dailyTargetReps, planned.repsPerSet),
+                        repsPerSet = plannedSets.firstOrNull() ?: planned.repsPerSet,
+                        sets = todayExercise?.sets ?: plannedSets,
                         completedIndexes = todayExercise?.completedIndexes.orEmpty(),
                         periodDays = workout.workout.periodDays,
                         total = totals.byExercise[planned.exercise.id],
@@ -298,7 +297,6 @@ fun WorkoutDetailScreen(
 @Composable
 private fun ExerciseSetsCard(
     name: String,
-    description: String,
     dailyTargetReps: Int,
     repsPerSet: Int,
     sets: List<Int>,
@@ -343,15 +341,8 @@ private fun ExerciseSetsCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.tertiary,
             )
-            if (description.isNotBlank()) {
-                Text(
-                    description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Text(
-                "Сегодня: $dailyTargetReps раз → ${sets.size} подходов по $repsPerSet",
+                "На сегодня: $dailyTargetReps раз → ${sets.size} подходов по $repsPerSet раз (с учетом времени)",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

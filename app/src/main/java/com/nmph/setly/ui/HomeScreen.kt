@@ -210,7 +210,9 @@ private fun WorkoutCard(
                 }
             }
             val totalSets = todayItem?.totalSets
-                ?: item.exercises.sumOf { DistributionHelper.setsForPlan(it).size }
+                ?: item.exercises.sumOf {
+                    DistributionHelper.setsForPlan(it, item.workout).size
+                }
             Text(
                 "Отдых: ${DistributionHelper.restMinutes(item.workout.sleepStart, item.workout.sleepEnd, totalSets)} мин",
                 style = MaterialTheme.typography.bodySmall,

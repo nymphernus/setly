@@ -1,5 +1,10 @@
 package com.nmph.setly.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -42,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.utils.DistributionHelper
@@ -59,6 +68,11 @@ private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInp
     },
 )
 
+private val ExpandedIdsSaver = Saver<MutableState<List<Int>>, List<Int>>(
+    save = { it.value },
+    restore = { mutableStateOf(it) },
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditWorkoutScreen(
@@ -70,9 +84,18 @@ fun AddEditWorkoutScreen(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
+        availableTimeMinutes: Int,
+        notificationsEnabled: Boolean,
+        remindBeforeMinutes: Int,
         settings: List<WorkoutExerciseSettings>,
     ) -> Unit,
-    onCreateExercise: (name: String, description: String, onCreated: (Int) -> Unit) -> Unit,
+    onCreateExercise: (
+        name: String,
+        category: String,
+        unit: String,
+        iconResName: String,
+        onCreated: (Int) -> Unit,
+    ) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -86,8 +109,26 @@ fun AddEditWorkoutScreen(
     val sleepEnd = rememberSaveable {
         mutableStateOf(workout?.workout?.sleepEnd ?: "08:00")
     }
+    val availableTime = rememberSaveable {
+        mutableStateOf(
+            workout?.workout?.availableTimeMinutes?.toString()
+                ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES.toString(),
+        )
+    }
+    val notificationsEnabled = rememberSaveable {
+        mutableStateOf(workout?.workout?.notificationsEnabled ?: true)
+    }
+    val remindBefore = rememberSaveable {
+        mutableStateOf(
+            workout?.workout?.remindBeforeMinutes?.toString()
+                ?: WorkoutEntity.DEFAULT_REMIND_BEFORE_MINUTES.toString(),
+        )
+    }
     val selectedExercises = rememberSaveable(saver = SelectedExercisesSaver) {
         mutableStateOf(emptyList<SelectedExerciseInput>())
+    }
+    val expandedIds = rememberSaveable(saver = ExpandedIdsSaver) {
+        mutableStateOf(emptyList<Int>())
     }
     val initializedWorkoutId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
     val showExercisePicker = rememberSaveable { mutableStateOf(false) }
@@ -102,6 +143,11 @@ fun AddEditWorkoutScreen(
         period.value = workout?.workout?.periodDays?.toString() ?: "30"
         sleepStart.value = workout?.workout?.sleepStart ?: "22:00"
         sleepEnd.value = workout?.workout?.sleepEnd ?: "08:00"
+        availableTime.value = workout?.workout?.availableTimeMinutes?.toString()
+            ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES.toString()
+        notificationsEnabled.value = workout?.workout?.notificationsEnabled ?: true
+        remindBefore.value = workout?.workout?.remindBeforeMinutes?.toString()
+            ?: WorkoutEntity.DEFAULT_REMIND_BEFORE_MINUTES.toString()
         selectedExercises.value = initialSettings.map { (id, settings) ->
             SelectedExerciseInput(
                 exerciseId = id,
@@ -109,6 +155,7 @@ fun AddEditWorkoutScreen(
                 repsPerSet = settings.second.toString(),
             )
         }
+        expandedIds.value = emptyList()
         initializedWorkoutId.value = incomingId
     }
 
@@ -140,32 +187,58 @@ fun AddEditWorkoutScreen(
                 value = name.value,
                 onValueChange = { name.value = it },
                 label = { Text("Название тренировки") },
-                placeholder = { Text("Введите название") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
             NumberField(
                 label = "Период в днях",
                 value = period.value,
-                placeholder = "30",
                 onChange = { period.value = it },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TimeField(
                     label = "Сон начало",
                     value = sleepStart.value,
-                    placeholder = "22:00",
                     onChange = { sleepStart.value = it },
                     modifier = Modifier.weight(1f),
                 )
                 TimeField(
                     label = "Сон конец",
                     value = sleepEnd.value,
-                    placeholder = "08:00",
                     onChange = { sleepEnd.value = it },
                     modifier = Modifier.weight(1f),
                 )
             }
+            NumberField(
+                label = "Время на тренировку, минут",
+                value = availableTime.value,
+                onChange = { availableTime.value = it },
+            )
+
+            Text(
+                "Уведомления",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Включить уведомления",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = notificationsEnabled.value,
+                    onCheckedChange = { notificationsEnabled.value = it },
+                )
+            }
+            NumberField(
+                label = "За сколько минут до подхода напомнить",
+                value = remindBefore.value,
+                onChange = { remindBefore.value = it },
+            )
 
             Button(
                 onClick = { showExercisePicker.value = true },
@@ -179,10 +252,22 @@ fun AddEditWorkoutScreen(
             val selected = availableExercises.filter { it.id in selectedIds }
             selected.forEach { exercise ->
                 val input = selectedExercises.value.first { it.exerciseId == exercise.id }
-                SelectedExerciseCard(
+                val isExpanded = exercise.id in expandedIds.value
+                SelectedExerciseAccordion(
                     exercise = exercise,
                     dailyTargetReps = input.dailyTargetReps,
                     repsPerSet = input.repsPerSet,
+                    availableTimeMinutes = availableTime.value.toIntOrNull() ?: 0,
+                    sleepStart = sleepStart.value,
+                    sleepEnd = sleepEnd.value,
+                    expanded = isExpanded,
+                    onToggle = {
+                        expandedIds.value = if (isExpanded) {
+                            expandedIds.value.filterNot { it == exercise.id }
+                        } else {
+                            expandedIds.value + exercise.id
+                        }
+                    },
                     onTargetChange = { value ->
                         selectedExercises.value = selectedExercises.value.map {
                             if (it.exerciseId == exercise.id) {
@@ -205,6 +290,7 @@ fun AddEditWorkoutScreen(
                         selectedExercises.value = selectedExercises.value.filterNot {
                             it.exerciseId == exercise.id
                         }
+                        expandedIds.value = expandedIds.value.filterNot { it == exercise.id }
                     },
                 )
             }
@@ -218,6 +304,8 @@ fun AddEditWorkoutScreen(
                 (period.value.toIntOrNull() ?: 0) > 0 &&
                 isValidTime(sleepStart.value) &&
                 isValidTime(sleepEnd.value) &&
+                (availableTime.value.toIntOrNull() ?: 0) > 0 &&
+                (remindBefore.value.toIntOrNull() ?: 0) > 0 &&
                 settingsValid
 
             if (!settingsValid) {
@@ -236,6 +324,9 @@ fun AddEditWorkoutScreen(
                             period.value.toInt(),
                             sleepStart.value,
                             sleepEnd.value,
+                            availableTime.value.toInt(),
+                            notificationsEnabled.value,
+                            remindBefore.value.toInt(),
                             selectedExercises.value.map {
                                 WorkoutExerciseSettings(
                                     exerciseId = it.exerciseId,
@@ -301,13 +392,11 @@ fun AddEditWorkoutScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(exercise.name, style = MaterialTheme.typography.titleSmall)
-                                if (exercise.description.isNotBlank()) {
-                                    Text(
-                                        exercise.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                                Text(
+                                    "${exercise.category} · ${exercise.unit}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -319,8 +408,8 @@ fun AddEditWorkoutScreen(
     if (showCreateDialog.value) {
         CreateExerciseDialog(
             onDismiss = { showCreateDialog.value = false },
-            onCreate = { nameOfExercise, description ->
-                onCreateExercise(nameOfExercise, description) { newId ->
+            onCreate = { nameOfExercise, category, unit, iconResName ->
+                onCreateExercise(nameOfExercise, category, unit, iconResName) { newId ->
                     selectedExercises.value = selectedExercises.value +
                         SelectedExerciseInput(
                             exerciseId = newId,
@@ -338,38 +427,32 @@ fun AddEditWorkoutScreen(
 @Composable
 private fun CreateExerciseDialog(
     onDismiss: () -> Unit,
-    onCreate: (String, String) -> Unit,
+    onCreate: (String, String, String, String) -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultCategory()) }
+    var unit by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultUnit()) }
+    var iconResName by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultIcon()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новое упражнение") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Название") },
-                    placeholder = { Text("Например, Отжимания") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Описание (необязательно)") },
-                    placeholder = { Text("Например, грудь и трицепс") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                )
-            }
+            ExerciseEditorFields(
+                name = name,
+                onNameChange = { name = it },
+                category = category,
+                onCategoryChange = { category = it },
+                unit = unit,
+                onUnitChange = { unit = it },
+                iconResName = iconResName,
+                onIconChange = { iconResName = it },
+            )
         },
         confirmButton = {
             TextButton(
                 enabled = name.isNotBlank(),
-                onClick = { onCreate(name.trim(), description.trim()) },
+                onClick = { onCreate(name.trim(), category, unit, iconResName) },
             ) { Text("Создать и добавить") }
         },
         dismissButton = {
@@ -379,86 +462,128 @@ private fun CreateExerciseDialog(
 }
 
 @Composable
-private fun SelectedExerciseCard(
+private fun SelectedExerciseAccordion(
     exercise: ExerciseEntity,
     dailyTargetReps: String,
     repsPerSet: String,
+    availableTimeMinutes: Int,
+    sleepStart: String,
+    sleepEnd: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     onTargetChange: (String) -> Unit,
     onRepsPerSetChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
     val target = dailyTargetReps.toIntOrNull() ?: 0
     val perSet = repsPerSet.toIntOrNull() ?: 0
-    val sets = DistributionHelper.setsForDay(target, perSet)
+    val planWorkout = WorkoutEntity(
+        name = "",
+        startDate = 0L,
+        periodDays = 0,
+        availableTimeMinutes = availableTimeMinutes,
+        sleepStart = sleepStart,
+        sleepEnd = sleepEnd,
+    )
+    val sets = if (target > 0 && perSet > 0) {
+        DistributionHelper.setsForPlan(
+            PlannedExercisePreview(exercise, target, perSet).toPlan(),
+            planWorkout,
+        )
+    } else {
+        emptyList()
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(exercise.name, style = MaterialTheme.typography.titleSmall)
-                    if (exercise.description.isNotBlank()) {
-                        Text(
-                            exercise.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    exercise.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    NumberField(
+                        label = "Сколько раз в день",
+                        value = dailyTargetReps,
+                        onChange = onTargetChange,
+                    )
+                    NumberField(
+                        label = "Повторений в подходе",
+                        value = repsPerSet,
+                        onChange = onRepsPerSetChange,
+                    )
+                    Text(
+                        if (sets.isNotEmpty()) {
+                            "На сегодня: $target раз → ${sets.size} подходов по " +
+                                "${sets.first()} раз (с учетом времени)"
+                        } else {
+                            "Укажите дневную норму и число повторений в подходе"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        IconButton(onClick = onRemove) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Убрать упражнение",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Close, contentDescription = "Убрать упражнение")
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                NumberField(
-                    label = "Сколько раз в день",
-                    value = dailyTargetReps,
-                    placeholder = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
-                    onChange = onTargetChange,
-                )
-                Text(
-                    "Например, 300. Приложение разобьёт на подходы автоматически.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                NumberField(
-                    label = "Повторений в подходе",
-                    value = repsPerSet,
-                    placeholder = DistributionHelper.DEFAULT_REPS_PER_SET.toString(),
-                    onChange = onRepsPerSetChange,
-                )
-                Text(
-                    if (sets.isNotEmpty()) {
-                        "Сегодня: $target раз → ${sets.size} подходов по $perSet"
-                    } else {
-                        "Укажите дневную норму и число повторений в подходе"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
             }
         }
     }
+}
+
+/** Временная обёртка для расчёта превью без изменения настройки упражнения. */
+private data class PlannedExercisePreview(
+    private val exercise: ExerciseEntity,
+    private val target: Int,
+    private val perSet: Int,
+) {
+    fun toPlan() = com.nmph.setly.data.local.PlannedExercise(
+        exercise = exercise,
+        dailyTargetReps = target,
+        repsPerSet = perSet,
+    )
 }
 
 @Composable
 private fun NumberField(
     label: String,
     value: String,
-    placeholder: String,
     onChange: (String) -> Unit,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = { raw -> onChange(raw.filter { it.isDigit() }) },
         label = { Text(label) },
-        placeholder = { Text(placeholder) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -469,7 +594,6 @@ private fun NumberField(
 private fun TimeField(
     label: String,
     value: String,
-    placeholder: String,
     onChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -479,7 +603,6 @@ private fun TimeField(
             onChange(raw.filter { it.isDigit() || it == ':' }.take(5))
         },
         label = { Text(label) },
-        placeholder = { Text(placeholder) },
         modifier = modifier,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

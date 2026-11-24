@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Монохромный силуэт лотоса для themed-иконок Android 13+. Окрашивается системой. -->
+<!-- Монохромный силуэт гантели для themed-иконок Android 13+. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -8,14 +8,17 @@
 
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,28 C63,42 68,53 68,61 C68,70 62,77 54,77 C46,77 40,70 40,61 C40,53 45,42 54,28 Z" />
+        android:pathData="M38,51 H70 V57 H38 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M51,75 C40,73 29,64 27,52 C40,52 49,61 51,75 Z" />
+        android:pathData="M30,42 H35 A3,3 0 0 1 38,45 V63 A3,3 0 0 1 35,66 H30 A3,3 0 0 1 27,63 V45 A3,3 0 0 1 30,42 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M57,75 C68,73 79,64 81,52 C68,52 59,61 57,75 Z" />
+        android:pathData="M73,42 H78 A3,3 0 0 1 81,45 V63 A3,3 0 0 1 78,66 H73 A3,3 0 0 1 70,63 V45 A3,3 0 0 1 73,42 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,64 C56.8,64 59,66.2 59,69 C59,71.8 56.8,74 54,74 C51.2,74 49,71.8 49,69 C49,66.2 51.2,64 54,64 Z" />
+        android:pathData="M23,46 H27 V62 H23 A3,3 0 0 1 20,59 V49 A3,3 0 0 1 23,46 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M81,46 H85 A3,3 0 0 1 88,49 V59 A3,3 0 0 1 85,62 H81 Z" />
 </vector>

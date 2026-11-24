@@ -50,7 +50,7 @@ class WorkoutDetailViewModel(
             val end = start.plusDays(plan.workout.periodDays.toLong() - 1)
 
             val byExercise = plan.exercises.associate { planned ->
-                val sets = DistributionHelper.setsForPlan(planned)
+                val sets = DistributionHelper.setsForPlan(planned, plan.workout)
                 val entries = progress.filter { record ->
                     val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
                     record.exerciseId == planned.exercise.id &&

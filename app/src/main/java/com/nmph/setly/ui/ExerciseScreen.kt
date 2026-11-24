@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -121,8 +121,8 @@ fun ExerciseScreen(
     if (showCreateDialog) {
         CreateExerciseDialog(
             onDismiss = { showCreateDialog = false },
-            onCreate = { name, description ->
-                viewModel.addExercise(name, description)
+            onCreate = { name, category, unit, iconResName ->
+                viewModel.addExercise(name, category, unit, iconResName)
                 showCreateDialog = false
             },
         )
@@ -149,38 +149,32 @@ fun ExerciseScreen(
 @Composable
 private fun CreateExerciseDialog(
     onDismiss: () -> Unit,
-    onCreate: (String, String) -> Unit,
+    onCreate: (String, String, String, String) -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultCategory()) }
+    var unit by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultUnit()) }
+    var iconResName by rememberSaveable { mutableStateOf(ExerciseCatalog.defaultIcon()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новое упражнение") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Название") },
-                    placeholder = { Text("Например, Отжимания") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Описание (необязательно)") },
-                    placeholder = { Text("Например, грудь и трицепс") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                )
-            }
+            ExerciseEditorFields(
+                name = name,
+                onNameChange = { name = it },
+                category = category,
+                onCategoryChange = { category = it },
+                unit = unit,
+                onUnitChange = { unit = it },
+                iconResName = iconResName,
+                onIconChange = { iconResName = it },
+            )
         },
         confirmButton = {
             TextButton(
                 enabled = name.isNotBlank(),
-                onClick = { onCreate(name.trim(), description.trim()) },
+                onClick = { onCreate(name.trim(), category, unit, iconResName) },
             ) { Text("Добавить") }
         },
         dismissButton = {
@@ -207,6 +201,14 @@ private fun ExerciseCard(
                 .padding(AppSpacing.CardInner),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(
+                imageVector = ExerciseCatalog.iconFor(exercise.iconResName),
+                contentDescription = ExerciseCatalog.labelFor(exercise.iconResName),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(32.dp)
+                    .padding(end = AppSpacing.CardInner),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     exercise.name,
@@ -214,7 +216,7 @@ private fun ExerciseCard(
                     color = MaterialTheme.colorScheme.tertiary,
                 )
                 Text(
-                    exercise.description.ifBlank { "Описание не добавлено" },
+                    "${exercise.category} · ${exercise.unit}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

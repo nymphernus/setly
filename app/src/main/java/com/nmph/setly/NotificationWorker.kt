@@ -16,6 +16,9 @@ import androidx.core.content.ContextCompat
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.nmph.setly.data.local.AppDatabase
+import com.nmph.setly.data.local.WorkoutPlan
+import com.nmph.setly.data.local.withPlans
+import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -30,9 +33,11 @@ class NotificationWorker(
     override fun doWork(): Result {
         createChannel()
 
-        // Текущая тренировка — активная сегодня. Если её нет (или нет тренировок вовсе),
-        // уведомление ведёт на главный экран.
-        val workoutId = currentWorkoutId()
+        // ID тренировки приходит из настроек; без него берём активную на сегодня.
+        val requestedId = inputData.getInt(KEY_WORKOUT_ID, -1).takeIf { it > 0 }
+        val remindBefore = inputData.getInt(KEY_REMIND_BEFORE_MINUTES, 5).coerceAtLeast(1)
+        val reminder = loadReminder(requestedId)
+        val workoutId = reminder?.first?.workout?.id
         val deepLink = if (workoutId != null) {
             "setly://workout_detail/$workoutId"
         } else {
@@ -52,10 +57,18 @@ class NotificationWorker(
             )!!
         }
 
+        val message = if (reminder != null) {
+            val plan = reminder.first
+            "Скоро подход! Тренировка \"${plan.workout.name}\", осталось ${reminder.second} кругов"
+        } else {
+            "Скоро подход! Пора тренироваться"
+        }
+
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Setly")
-            .setContentText(if (workoutId != null) "Пора делать подход!" else "Пора тренироваться!")
+            .setContentText(message)
+            .setSubText("Напоминание за $remindBefore мин")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -74,24 +87,45 @@ class NotificationWorker(
         return Result.success()
     }
 
-    private fun currentWorkoutId(): Int? = try {
+    /** Возвращает план и число оставшихся подходов на сегодня. */
+    private fun loadReminder(requestedId: Int?): Pair<WorkoutPlan, Int>? = try {
         runBlocking {
-            val workouts = AppDatabase.getDatabase(applicationContext)
-                .workoutDao()
-                .getAllWorkouts()
-                .first()
-            val today = LocalDate.now()
-            val active = workouts.firstOrNull { workout ->
-                val start = Instant.ofEpochMilli(workout.startDate)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-                !today.isBefore(start) &&
-                    !today.isAfter(start.plusDays(workout.periodDays.toLong() - 1))
+            val database = AppDatabase.getDatabase(applicationContext)
+            val workoutDao = database.workoutDao()
+            val plans = workoutDao.getAllWorkouts().first()
+                .withPlans(workoutDao.observePlannedExercises().first())
+            val plan = requestedId?.let { id ->
+                plans.firstOrNull { it.workout.id == id }
+            } ?: plans.firstOrNull { isActiveToday(it.workout) }
+            if (plan == null) return@runBlocking null
+
+            val setsByExercise = plan.exercises.associate { planned ->
+                planned.exercise.id to DistributionHelper.setsForPlan(planned, plan.workout)
             }
-            active?.id?.takeIf { it > 0 }
+            val exerciseIds = setsByExercise.keys
+            val progress = database.progressDao()
+                .getProgressForDate(LocalDate.now().toString())
+                .first()
+            val completed = progress
+                .filter { it.exerciseId in exerciseIds }
+                .sumOf { record ->
+                    val sets = setsByExercise[record.exerciseId].orEmpty()
+                    record.completedSets.count { index -> index in sets.indices }
+                }
+            val total = setsByExercise.values.sumOf { it.size }
+            plan to (total - completed).coerceAtLeast(0)
         }
     } catch (e: Exception) {
         null
+    }
+
+    private fun isActiveToday(workout: com.nmph.setly.data.local.WorkoutEntity): Boolean {
+        val today = LocalDate.now()
+        val start = Instant.ofEpochMilli(workout.startDate)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+        return !today.isBefore(start) &&
+            !today.isAfter(start.plusDays(workout.periodDays.toLong() - 1))
     }
 
     private fun createChannel() {
@@ -105,7 +139,9 @@ class NotificationWorker(
         }
     }
 
-    private companion object {
+    companion object {
+        const val KEY_WORKOUT_ID = "workoutId"
+        const val KEY_REMIND_BEFORE_MINUTES = "remindBeforeMinutes"
         const val CHANNEL_ID = "setly_reminders"
         const val NOTIFICATION_ID = 1001
         const val ACTION_OPEN_FROM_NOTIFICATION = "com.nmph.setly.OPEN_WORKOUT"

@@ -2,6 +2,7 @@ package com.nmph.setly
 
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.PlannedExercise
+import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.utils.DistributionHelper
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -13,6 +14,15 @@ class DistributionHelperTest {
         repsPerSet = repsPerSet,
     )
 
+    private fun workout(availableTimeMinutes: Int = 60) = WorkoutEntity(
+        name = "Тест",
+        startDate = 0L,
+        periodDays = 30,
+        sleepStart = "22:00",
+        sleepEnd = "08:00",
+        availableTimeMinutes = availableTimeMinutes,
+    )
+
     @Test
     fun `sleep across midnight is measured correctly`() {
         assertEquals(600, DistributionHelper.sleepMinutes("22:00", "08:00"))
@@ -20,17 +30,24 @@ class DistributionHelperTest {
     }
 
     @Test
-    fun `daily target is split into equal sets`() {
-        val sets = DistributionHelper.setsForPlan(plan(dailyTargetReps = 300, repsPerSet = 30))
-        assertEquals(10, sets.size)
-        assertEquals(List(10) { 30 }, sets)
+    fun `sets are limited by available time`() {
+        // rest=10 мин (огранчение планирования), один подход ~2 мин → 60 / 12 = 5 подходов.
+        val sets = DistributionHelper.setsForPlan(plan(dailyTargetReps = 300), workout())
+        assertEquals(5, sets.size)
+        assertEquals(List(5) { 60 }, sets)
     }
 
     @Test
-    fun `last set can be shorter`() {
+    fun `max sets is never less than one`() {
+        assertEquals(1, DistributionHelper.maxSetsForTime(1, 10, 20))
+        assertEquals(listOf(300), DistributionHelper.setsForPlan(plan(300), workout(1)))
+    }
+
+    @Test
+    fun `last set can be shorter with ceiling`() {
         assertEquals(
-            listOf(20, 20, 3),
-            DistributionHelper.setsForDay(dailyTargetReps = 43, repsPerSet = 20),
+            listOf(9, 9, 9, 9, 7),
+            DistributionHelper.splitEvenly(dailyTargetReps = 43, maxSets = 5),
         )
     }
 

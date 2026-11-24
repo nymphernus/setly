@@ -15,11 +15,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -30,13 +30,37 @@ import com.nmph.setly.data.local.ExerciseEntity
 @Composable
 fun AddEditExerciseScreen(
     exercise: ExerciseEntity?,
-    onSave: (name: String, description: String) -> Unit,
+    onSave: (name: String, category: String, unit: String, iconResName: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val name = rememberSaveable { mutableStateOf(exercise?.name.orEmpty()) }
-    val description = rememberSaveable { mutableStateOf(exercise?.description.orEmpty()) }
+    val category = rememberSaveable {
+        mutableStateOf(exercise?.category?.ifBlank { ExerciseCatalog.defaultCategory() }
+            ?: ExerciseCatalog.defaultCategory())
+    }
+    val unit = rememberSaveable {
+        mutableStateOf(exercise?.unit?.ifBlank { ExerciseCatalog.defaultUnit() }
+            ?: ExerciseCatalog.defaultUnit())
+    }
+    val iconResName = rememberSaveable {
+        mutableStateOf(exercise?.iconResName?.ifBlank { ExerciseCatalog.defaultIcon() }
+            ?: ExerciseCatalog.defaultIcon())
+    }
+    val initializedId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(exercise?.id) {
+        val incomingId = exercise?.id ?: -1
+        if (initializedId.value == incomingId) return@LaunchedEffect
+        exercise?.let {
+            name.value = it.name
+            category.value = it.category.ifBlank { ExerciseCatalog.defaultCategory() }
+            unit.value = it.unit.ifBlank { ExerciseCatalog.defaultUnit() }
+            iconResName.value = it.iconResName.ifBlank { ExerciseCatalog.defaultIcon() }
+        }
+        initializedId.value = incomingId
+    }
 
     Scaffold(
         modifier = modifier,
@@ -61,32 +85,26 @@ fun AddEditExerciseScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Опишите упражнение один раз — затем добавляйте его в тренировки. " +
-                    "Дневную норму и размер подхода зададите в тренировке.",
+                "Категория, единица измерения и иконка помогут быстрее находить упражнение " +
+                    "и понимать, как считать подход.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedTextField(
-                value = name.value,
-                onValueChange = { name.value = it },
-                label = { Text("Название") },
-                placeholder = { Text("Например, Отжимания") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = description.value,
-                onValueChange = { description.value = it },
-                label = { Text("Описание (необязательно)") },
-                placeholder = { Text("Например, грудь и трицепс") },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 4,
+            ExerciseEditorFields(
+                name = name.value,
+                onNameChange = { name.value = it },
+                category = category.value,
+                onCategoryChange = { category.value = it },
+                unit = unit.value,
+                onUnitChange = { unit.value = it },
+                iconResName = iconResName.value,
+                onIconChange = { iconResName.value = it },
             )
 
             Button(
                 onClick = {
                     if (name.value.isNotBlank()) {
-                        onSave(name.value.trim(), description.value.trim())
+                        onSave(name.value.trim(), category.value, unit.value, iconResName.value)
                     }
                 },
                 enabled = name.value.isNotBlank(),

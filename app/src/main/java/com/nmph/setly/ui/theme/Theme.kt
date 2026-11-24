@@ -114,8 +114,8 @@ private val AppTypography = Typography().copy(
 
 @Composable
 fun SetlyTheme(
-    // Приложение по умолчанию открывается в светлой теме «Тёплый песок».
-    darkTheme: Boolean = false,
+    // Тёмная тема — вариант по умолчанию; системная тема на выбор не влияет.
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkColors else LightColors

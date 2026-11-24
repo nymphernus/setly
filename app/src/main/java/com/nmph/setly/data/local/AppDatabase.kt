@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -269,6 +269,45 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v10: у упражнения вместо описания появляются категория, единица и имя иконки;
+        // у тренировки — доступное время и настройки напоминаний.
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `exercises_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `unit` TEXT NOT NULL,
+                        `iconResName` TEXT NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `exercises_new` (`id`, `name`, `category`, `unit`, `iconResName`)
+                    SELECT `id`, `name`, 'Грудь', 'Повторения', 'fitness_center' FROM `exercises`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `exercises`")
+                db.execSQL("ALTER TABLE `exercises_new` RENAME TO `exercises`")
+
+                db.execSQL(
+                    "ALTER TABLE `workouts` ADD COLUMN `availableTimeMinutes` " +
+                        "INTEGER NOT NULL DEFAULT 60",
+                )
+                db.execSQL(
+                    "ALTER TABLE `workouts` ADD COLUMN `notificationsEnabled` " +
+                        "INTEGER NOT NULL DEFAULT 1",
+                )
+                db.execSQL(
+                    "ALTER TABLE `workouts` ADD COLUMN `remindBeforeMinutes` " +
+                        "INTEGER NOT NULL DEFAULT 5",
+                )
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -279,7 +318,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
                     )
                     .build().also { INSTANCE = it }
             }

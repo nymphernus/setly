@@ -8,8 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 class AppSettings(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    // Новая фирменная палитра по умолчанию светлая; тёмная включается только вручную.
-    private val _darkTheme = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, false))
+    // Приложение по умолчанию открывается в тёмной теме, независимо от системных настроек.
+    private val _darkTheme = MutableStateFlow(prefs.getBoolean(KEY_DARK_THEME, true))
     val darkTheme: StateFlow<Boolean> = _darkTheme
 
     private val _notificationsEnabled = MutableStateFlow(

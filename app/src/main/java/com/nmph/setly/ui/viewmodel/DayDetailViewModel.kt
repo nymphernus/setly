@@ -53,7 +53,7 @@ class DayDetailViewModel(
                     DayWorkoutItem(
                         workout = plan.workout,
                         exercises = plan.exercises.map { planned ->
-                            val sets = DistributionHelper.setsForPlan(planned)
+                            val sets = DistributionHelper.setsForPlan(planned, plan.workout)
                             val saved = progress
                                 .firstOrNull { it.exerciseId == planned.exercise.id }
                                 ?.completedSets

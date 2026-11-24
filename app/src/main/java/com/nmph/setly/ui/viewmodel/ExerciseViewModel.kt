@@ -23,19 +23,23 @@ class ExerciseViewModel(
         )
 
     /**
-     * Глобальное упражнение создаётся с названием и описанием. Размер подхода и дневная
-     * цель задаются позже, в настройках конкретной тренировки.
+     * Глобальное упражнение создаётся с категорией, единицей измерения и иконкой.
+     * Дневная цель и число подходов задаются в настройках конкретной тренировки.
      */
     fun addExercise(
         name: String,
-        description: String = "",
+        category: String,
+        unit: String,
+        iconResName: String,
         onCreated: (Int) -> Unit = {},
     ) {
         viewModelScope.launch {
             val id = dao.insertAndGetId(
                 ExerciseEntity(
                     name = name.trim(),
-                    description = description.trim(),
+                    category = category,
+                    unit = unit,
+                    iconResName = iconResName,
                 ),
             ).toInt()
             onCreated(id)

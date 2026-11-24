@@ -131,15 +131,9 @@ private fun DayExerciseRow(item: DayExerciseItem) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(item.exercise.name, style = MaterialTheme.typography.titleSmall)
-        if (item.exercise.description.isNotBlank()) {
-            Text(
-                item.exercise.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
         Text(
-            "Цель: ${item.dailyTargetReps} раз → ${item.sets.size} подходов по ${item.repsPerSet}",
+            "На сегодня: ${item.dailyTargetReps} раз → ${item.sets.size} подходов по " +
+                "${item.sets.firstOrNull() ?: item.repsPerSet} раз (с учетом времени)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

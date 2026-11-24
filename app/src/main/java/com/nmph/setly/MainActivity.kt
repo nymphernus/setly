@@ -22,6 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -55,7 +56,9 @@ import com.nmph.setly.ui.viewmodel.WorkoutViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -92,20 +95,6 @@ class MainActivity : ComponentActivity() {
             val darkTheme by settings.darkTheme.collectAsState()
             val notificationsEnabled by settings.notificationsEnabled.collectAsState()
             var snackbarMessage by remember { mutableStateOf<String?>(null) }
-
-            // Напоминание включается/выключается из настроек профиля.
-            LaunchedEffect(notificationsEnabled) {
-                val workManager = WorkManager.getInstance(applicationContext)
-                if (notificationsEnabled) {
-                    workManager.enqueueUniquePeriodicWork(
-                        "setly_workout_reminder",
-                        ExistingPeriodicWorkPolicy.KEEP,
-                        PeriodicWorkRequestBuilder<NotificationWorker>(30, TimeUnit.MINUTES).build(),
-                    )
-                } else {
-                    workManager.cancelUniqueWork("setly_workout_reminder")
-                }
-            }
 
             SetlyTheme(darkTheme = darkTheme) {
                 val navController = rememberNavController()
@@ -150,6 +139,37 @@ class MainActivity : ComponentActivity() {
                 val lastSyncError by syncManager.lastSyncError.collectAsState()
                 val isSyncing by syncManager.isSyncing.collectAsState()
                 val todayWorkouts by todayVM.todayWorkouts.collectAsState()
+
+                // Напоминание привязано к конкретной активной тренировке и её настройкам.
+                val notifiedWorkout = workouts.firstOrNull {
+                    it.workout.notificationsEnabled && isActiveToday(it.workout)
+                }
+                LaunchedEffect(
+                    notificationsEnabled,
+                    notifiedWorkout?.workout?.id,
+                    notifiedWorkout?.workout?.remindBeforeMinutes,
+                ) {
+                    val workManager = WorkManager.getInstance(applicationContext)
+                    val target = notifiedWorkout
+                    if (notificationsEnabled && target != null) {
+                        val inputData = Data.Builder()
+                            .putInt(NotificationWorker.KEY_WORKOUT_ID, target.workout.id)
+                            .putInt(
+                                NotificationWorker.KEY_REMIND_BEFORE_MINUTES,
+                                target.workout.remindBeforeMinutes,
+                            )
+                            .build()
+                        workManager.enqueueUniquePeriodicWork(
+                            "setly_workout_reminder",
+                            ExistingPeriodicWorkPolicy.UPDATE,
+                            PeriodicWorkRequestBuilder<NotificationWorker>(30, TimeUnit.MINUTES)
+                                .setInputData(inputData)
+                                .build(),
+                        )
+                    } else {
+                        workManager.cancelUniqueWork("setly_workout_reminder")
+                    }
+                }
 
                 NavHost(navController = navController, startDestination = "splash") {
                     composable("splash") {
@@ -261,16 +281,18 @@ class MainActivity : ComponentActivity() {
                             workout = editingPlan,
                             availableExercises = exercises,
                             initialSettings = initialSettings,
-                            onSave = { name, period, sleepStart, sleepEnd, settings ->
+                            onSave = { name, period, sleepStart, sleepEnd, availableTime,
+                                notifications, remindBefore, settings ->
                                 workoutVM.saveWorkout(
-                                    id, name, period, sleepStart, sleepEnd, settings,
+                                    id, name, period, sleepStart, sleepEnd,
+                                    availableTime, notifications, remindBefore, settings,
                                 ) { message ->
                                     snackbarMessage = message
                                     navController.popBackStack()
                                 }
                             },
-                            onCreateExercise = { name, description, onCreated ->
-                                exerciseVM.addExercise(name, description, onCreated)
+                            onCreateExercise = { name, category, unit, iconResName, onCreated ->
+                                exerciseVM.addExercise(name, category, unit, iconResName, onCreated)
                             },
                             onBack = { navController.popBackStack() },
                         )
@@ -286,12 +308,17 @@ class MainActivity : ComponentActivity() {
                         val editing = if (id != -1) exerciseVM.getExerciseById(id) else null
                         AddEditExerciseScreen(
                             exercise = editing,
-                            onSave = { name, description ->
+                            onSave = { name, category, unit, iconResName ->
                                 if (editing == null) {
-                                    exerciseVM.addExercise(name, description)
+                                    exerciseVM.addExercise(name, category, unit, iconResName)
                                 } else {
                                     exerciseVM.updateExercise(
-                                        editing.copy(name = name, description = description),
+                                        editing.copy(
+                                            name = name,
+                                            category = category,
+                                            unit = unit,
+                                            iconResName = iconResName,
+                                        ),
                                     )
                                 }
                                 snackbarMessage = "Упражнение сохранено"
@@ -358,6 +385,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        fun isActiveToday(workout: com.nmph.setly.data.local.WorkoutEntity): Boolean {
+            val today = LocalDate.now()
+            val start = Instant.ofEpochMilli(workout.startDate)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            return !today.isBefore(start) &&
+                !today.isAfter(start.plusDays(workout.periodDays.toLong() - 1))
+        }
+
         const val EXTRA_WORKOUT_ID = "workoutId"
         const val DEEP_LINK_SCHEME = "setly"
         const val HOST_WORKOUT_DETAIL = "workout_detail"

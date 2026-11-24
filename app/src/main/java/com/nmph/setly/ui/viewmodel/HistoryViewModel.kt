@@ -100,7 +100,7 @@ class HistoryViewModel(
                 .toSet()
 
             val totalSets = active.sumOf { plan ->
-                plan.exercises.sumOf { DistributionHelper.setsForPlan(it).size }
+                plan.exercises.sumOf { DistributionHelper.setsForPlan(it, plan.workout).size }
             }
             if (totalSets <= 0) continue
             val doneSets = progress
