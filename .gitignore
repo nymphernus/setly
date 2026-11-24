@@ -1,6 +1,5 @@
 *.iml
 .gradle
-AGENT.md
 /local.properties
 /.idea/caches
 /.idea/libraries
