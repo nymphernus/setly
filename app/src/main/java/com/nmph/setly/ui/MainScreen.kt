@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -31,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nmph.setly.data.local.WorkoutPlan
+import com.nmph.setly.ui.viewmodel.AchievementsViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
@@ -46,6 +48,7 @@ fun MainScreen(
     stats: ProfileStats,
     historyViewModel: HistoryViewModel,
     exerciseViewModel: ExerciseViewModel,
+    achievementsViewModel: AchievementsViewModel,
     isSignedIn: Boolean,
     email: String?,
     lastSyncAt: Long?,
@@ -58,6 +61,7 @@ fun MainScreen(
     onAddWorkout: () -> Unit,
     onEditExercise: (Int) -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    onViewPreviousMonth: () -> Unit = {},
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
     onDeleteWorkout: (WorkoutPlan) -> Unit,
@@ -84,6 +88,7 @@ fun MainScreen(
         Triple("home", "Тренировки", Icons.Default.Home),
         Triple("exercises", "Упражнения", Icons.AutoMirrored.Filled.List),
         Triple("history", "История", Icons.Default.DateRange),
+        Triple("achievements", "Трофеи", Icons.Default.EmojiEvents),
         Triple("profile", "Профиль", Icons.Default.Person),
     )
 
@@ -160,7 +165,18 @@ fun MainScreen(
                 enterTransition = { fadeIn(animationSpec = tween(180)) },
                 exitTransition = { fadeOut(animationSpec = tween(180)) },
             ) {
-                HistoryScreen(viewModel = historyViewModel, onOpenDay = onOpenDay)
+                HistoryScreen(
+                    viewModel = historyViewModel,
+                    onOpenDay = onOpenDay,
+                    onViewPreviousMonth = onViewPreviousMonth,
+                )
+            }
+            composable(
+                "achievements",
+                enterTransition = { fadeIn(animationSpec = tween(180)) },
+                exitTransition = { fadeOut(animationSpec = tween(180)) },
+            ) {
+                AchievementsScreen(viewModel = achievementsViewModel)
             }
             composable(
                 "profile",

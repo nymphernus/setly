@@ -45,6 +45,7 @@ import java.util.Locale
 fun HistoryScreen(
     viewModel: HistoryViewModel,
     onOpenDay: (LocalDate) -> Unit,
+    onViewPreviousMonth: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val month by viewModel.month.collectAsStateWithLifecycle()
@@ -84,7 +85,12 @@ fun HistoryScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                IconButton(onClick = { viewModel.prevMonth() }) {
+                IconButton(
+                    onClick = {
+                        viewModel.prevMonth()
+                        onViewPreviousMonth()
+                    },
+                ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Предыдущий месяц")
                 }
                 Text(

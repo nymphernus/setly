@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +40,10 @@ import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.SplashScreen
 import com.nmph.setly.ui.WorkoutDetailScreen
 import com.nmph.setly.ui.theme.SetlyTheme
+import com.nmph.setly.utils.AchievementChecker
+import com.nmph.setly.utils.AchievementEvents
+import com.nmph.setly.ui.viewmodel.AchievementsViewModel
+import com.nmph.setly.ui.viewmodel.AchievementsViewModelFactory
 import com.nmph.setly.ui.viewmodel.DayDetailViewModel
 import com.nmph.setly.ui.viewmodel.DayDetailViewModelFactory
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
@@ -55,6 +60,7 @@ import com.nmph.setly.ui.viewmodel.WorkoutViewModel
 import com.nmph.setly.ui.viewmodel.WorkoutViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -65,6 +71,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private lateinit var syncManager: SyncManager
+    private lateinit var database: AppDatabase
     private val signInRequestCode = 1001
 
     // Уведомление/внешняя deep link может прийти до создания NavHost или уже в запущенном приложении.
@@ -80,7 +87,7 @@ class MainActivity : ComponentActivity() {
         authManager = AuthManager(this, syncManager)
         val settings = AppSettings(this)
         // Ранняя инициализация БД: падение схемы проявится сразу, а не при первом чтении.
-        val database = AppDatabase.getDatabase(this)
+        database = AppDatabase.getDatabase(this)
 
         handleDeepLink(intent)
 
@@ -95,6 +102,17 @@ class MainActivity : ComponentActivity() {
             val darkTheme by settings.darkTheme.collectAsState()
             val notificationsEnabled by settings.notificationsEnabled.collectAsState()
             var snackbarMessage by remember { mutableStateOf<String?>(null) }
+            val achievementQueue = remember { mutableStateListOf<String>() }
+
+            // Трофеи приходят как события; показываем их по очереди, не теряя при смене экрана.
+            LaunchedEffect(Unit) {
+                AchievementEvents.messages.collect { message -> achievementQueue.add(message) }
+            }
+            LaunchedEffect(snackbarMessage, achievementQueue.size) {
+                if (snackbarMessage == null && achievementQueue.isNotEmpty()) {
+                    snackbarMessage = achievementQueue.removeAt(0)
+                }
+            }
 
             SetlyTheme(darkTheme = darkTheme) {
                 val navController = rememberNavController()
@@ -115,13 +133,18 @@ class MainActivity : ComponentActivity() {
                 )
                 val workoutVM: WorkoutViewModel = viewModel(
                     factory = WorkoutViewModelFactory(
-                        database.workoutDao(), database.exerciseDao(), syncManager,
+                        database.workoutDao(), database.exerciseDao(), database.progressDao(),
+                        syncManager, database.achievementDao(),
                     ),
                 )
                 val todayVM: TodayViewModel = viewModel(
                     factory = TodayViewModelFactory(
-                        database.workoutDao(), database.exerciseDao(), database.progressDao(), syncManager,
+                        database.workoutDao(), database.exerciseDao(), database.progressDao(),
+                        syncManager, database.achievementDao(),
                     ),
+                )
+                val achievementsVM: AchievementsViewModel = viewModel(
+                    factory = AchievementsViewModelFactory(database.achievementDao()),
                 )
                 val historyVM: HistoryViewModel = viewModel(
                     factory = HistoryViewModelFactory(
@@ -188,6 +211,7 @@ class MainActivity : ComponentActivity() {
                             stats = stats,
                             historyViewModel = historyVM,
                             exerciseViewModel = exerciseVM,
+                            achievementsViewModel = achievementsVM,
                             isSignedIn = authManager.isSignedIn,
                             email = authManager.currentUser?.email,
                             lastSyncAt = lastSyncAt,
@@ -200,6 +224,13 @@ class MainActivity : ComponentActivity() {
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
                             onEditExercise = { id -> navController.navigate("exercise/$id") },
                             onOpenDay = { date -> navController.navigate("day_detail/$date") },
+                            onViewPreviousMonth = {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    AchievementChecker.unlockDirect(
+                                        database.achievementDao(), "calendar",
+                                    )
+                                }
+                            },
                             onOpenWorkout = { id -> navController.navigate("workout/$id") },
                             onEditWorkout = { id -> navController.navigate("edit_workout/$id") },
                             onDeleteWorkout = { item ->
@@ -224,6 +255,16 @@ class MainActivity : ComponentActivity() {
                                             syncManager.lastSyncError.value
                                                 ?.let { "Ошибка синхронизации: $it" }
                                                 ?: "Не удалось синхронизировать данные"
+                                        }
+                                        if (success) {
+                                            CoroutineScope(Dispatchers.IO).launch {
+                                                AchievementChecker.unlockDirect(
+                                                    database.achievementDao(), "sync",
+                                                )
+                                                AchievementChecker.unlockDirect(
+                                                    database.achievementDao(), "cloud",
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -367,7 +408,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         val workoutId = fromExtra ?: fromUri
-        if (workoutId != null) pendingWorkoutId.value = workoutId
+        if (workoutId != null) {
+            pendingWorkoutId.value = workoutId
+            CoroutineScope(Dispatchers.IO).launch {
+                AchievementChecker.unlockDirect(database.achievementDao(), "notified")
+            }
+        }
         // Очищаем обработанный intent: поворот экрана не должен открывать тренировку заново.
         intent.removeExtra(EXTRA_WORKOUT_ID)
         intent.data = null

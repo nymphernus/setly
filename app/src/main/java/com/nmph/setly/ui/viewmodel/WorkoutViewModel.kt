@@ -3,10 +3,12 @@ package com.nmph.setly.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.nmph.setly.data.local.AchievementDao
 import com.nmph.setly.data.local.ExerciseDao
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.PlannedExercise
 import com.nmph.setly.data.local.PlannedExerciseRow
+import com.nmph.setly.data.local.ProgressDao
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseCrossRef
@@ -14,6 +16,8 @@ import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.data.local.withPlans
 import com.nmph.setly.data.sync.SyncManager
+import com.nmph.setly.utils.AchievementChecker
+import com.nmph.setly.utils.AchievementContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +29,9 @@ import kotlinx.coroutines.withContext
 class WorkoutViewModel(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
+    private val progressDao: ProgressDao,
     private val syncManager: SyncManager,
+    private val achievementDao: AchievementDao,
 ) : ViewModel() {
     val workouts: StateFlow<List<WorkoutPlan>> = combine(
         workoutDao.getAllWorkouts(),
@@ -49,8 +55,21 @@ class WorkoutViewModel(
         onResult: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
-            val existing = workouts.value.firstOrNull { it.workout.id == id }?.workout
+            val existingPlan = workouts.value.firstOrNull { it.workout.id == id }
+            val existing = existingPlan?.workout
             val isNew = existing == null
+            val changedFields = mutableSetOf<String>()
+            if (existing != null) {
+                if (existing.name != name) changedFields += "name"
+                if (existing.availableTimeMinutes != availableTimeMinutes) {
+                    changedFields += "availableTime"
+                }
+                val oldReps = existingPlan.exercises
+                    .associate { it.exercise.id to it.repsPerSet }
+                if (settings.any { oldReps[it.exerciseId] != it.repsPerSet }) {
+                    changedFields += "reps"
+                }
+            }
             val workout = WorkoutEntity(
                 id = existing?.id ?: 0,
                 name = name,
@@ -79,6 +98,16 @@ class WorkoutViewModel(
                         PlannedExercise(exercise, link.dailyTargetReps, link.repsPerSet)
                     }
                 },
+            )
+            AchievementChecker.checkAfterWorkoutSave(
+                AchievementContext(
+                    achievementDao = achievementDao,
+                    workoutDao = workoutDao,
+                    exerciseDao = exerciseDao,
+                    progressDao = progressDao,
+                    changedFields = changedFields,
+                    hour = -1, // time-трофеи проверяем только при сохранении подхода
+                ),
             )
             onResult(if (isNew) "Тренировка создана" else "Тренировка обновлена")
             pushToCloud(savedPlan)
@@ -119,12 +148,16 @@ class WorkoutViewModel(
 class WorkoutViewModelFactory(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
+    private val progressDao: ProgressDao,
     private val syncManager: SyncManager,
+    private val achievementDao: AchievementDao,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(WorkoutViewModel::class.java)) {
-            return WorkoutViewModel(workoutDao, exerciseDao, syncManager) as T
+            return WorkoutViewModel(
+                workoutDao, exerciseDao, progressDao, syncManager, achievementDao,
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }

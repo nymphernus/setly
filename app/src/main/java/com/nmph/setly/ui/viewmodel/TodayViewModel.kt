@@ -3,6 +3,7 @@ package com.nmph.setly.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.nmph.setly.data.local.AchievementDao
 import com.nmph.setly.data.local.ExerciseDao
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.PlannedExerciseRow
@@ -12,6 +13,8 @@ import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.withPlans
 import com.nmph.setly.data.sync.SyncManager
+import com.nmph.setly.utils.AchievementChecker
+import com.nmph.setly.utils.AchievementContext
 import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,6 +55,7 @@ class TodayViewModel(
     private val exerciseDao: ExerciseDao,
     private val progressDao: ProgressDao,
     private val syncManager: SyncManager,
+    private val achievementDao: AchievementDao,
 ) : ViewModel() {
     private val today: LocalDate = LocalDate.now()
     private val todayDate: String = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -123,6 +127,14 @@ class TodayViewModel(
         )
         viewModelScope.launch {
             progressDao.insertOrUpdate(updatedProgress)
+            AchievementChecker.checkAfterProgress(
+                AchievementContext(
+                    achievementDao = achievementDao,
+                    workoutDao = workoutDao,
+                    exerciseDao = exerciseDao,
+                    progressDao = progressDao,
+                ),
+            )
             if (syncManager.isSignedIn) {
                 withContext(Dispatchers.IO) {
                     runCatching { syncManager.pushProgressToCloud(updatedProgress) }
@@ -145,11 +157,14 @@ class TodayViewModelFactory(
     private val exerciseDao: ExerciseDao,
     private val progressDao: ProgressDao,
     private val syncManager: SyncManager,
+    private val achievementDao: AchievementDao,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TodayViewModel::class.java)) {
-            return TodayViewModel(workoutDao, exerciseDao, progressDao, syncManager) as T
+            return TodayViewModel(
+                workoutDao, exerciseDao, progressDao, syncManager, achievementDao,
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
