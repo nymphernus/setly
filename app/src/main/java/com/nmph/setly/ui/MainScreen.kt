@@ -37,6 +37,7 @@ import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
+import com.nmph.setly.data.sync.BackupInfo
 import java.time.LocalDate
 
 /** Оболочка с нижней навигацией: каждая вкладка — полноценный маршрут. */
@@ -70,6 +71,10 @@ fun MainScreen(
     onSignIn: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit,
+    backups: List<BackupInfo> = emptyList(),
+    onBackup: () -> Unit = {},
+    onLoadBackups: () -> Unit = {},
+    onRestore: (BackupInfo) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -197,6 +202,10 @@ fun MainScreen(
                     onSignIn = onSignIn,
                     onSync = onSync,
                     onSignOut = onSignOut,
+                    backups = backups,
+                    onBackup = onBackup,
+                    onLoadBackups = onLoadBackups,
+                    onRestore = onRestore,
                 )
             }
         }

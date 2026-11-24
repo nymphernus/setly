@@ -15,10 +15,12 @@ import com.nmph.setly.data.local.WorkoutExerciseCrossRef
 import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.data.local.withPlans
+import com.nmph.setly.data.sync.BackupInfo
 import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.utils.AchievementChecker
 import com.nmph.setly.utils.AchievementContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -41,6 +43,9 @@ class WorkoutViewModel(
 
     val exercises: StateFlow<List<ExerciseEntity>> = exerciseDao.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _backups = MutableStateFlow<List<BackupInfo>>(emptyList())
+    val backups: StateFlow<List<BackupInfo>> = _backups
 
     fun saveWorkout(
         id: Int,
@@ -131,7 +136,55 @@ class WorkoutViewModel(
             } else {
                 false
             }
+            if (success) {
+                AchievementChecker.unlockDirect(achievementDao, "sync")
+                AchievementChecker.unlockDirect(achievementDao, "merge_master")
+            }
             withContext(Dispatchers.Main) { onResult(success) }
+        }
+    }
+
+    fun loadBackups(onResult: (String) -> Unit = {}) {
+        runCloudAction(
+            action = {
+                _backups.value = syncManager.listBackups()
+                "Найдено бекапов: ${_backups.value.size}"
+            },
+            onResult = onResult,
+        )
+    }
+
+    fun createBackup(onResult: (String) -> Unit = {}) {
+        runCloudAction(
+            action = {
+                val backup = syncManager.createBackup()
+                _backups.value = listOf(backup) + _backups.value.filterNot { it.id == backup.id }
+                AchievementChecker.unlockDirect(achievementDao, "backup_master")
+                "Бекап создан: ${backup.label}"
+            },
+            onResult = onResult,
+        )
+    }
+
+    fun restoreBackup(backup: BackupInfo, onResult: (String) -> Unit = {}) {
+        runCloudAction(
+            action = {
+                syncManager.restoreBackup(backup.id)
+                AchievementChecker.unlockDirect(achievementDao, "cloud")
+                "Данные восстановлены из бекапа ${backup.label}"
+            },
+            onResult = onResult,
+        )
+    }
+
+    private fun runCloudAction(
+        action: suspend () -> String,
+        onResult: (String) -> Unit,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val message = runCatching { action() }
+                .getOrElse { it.message?.takeIf { text -> text.isNotBlank() } ?: "Ошибка облака" }
+            withContext(Dispatchers.Main) { onResult(message) }
         }
     }
 

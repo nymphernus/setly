@@ -17,7 +17,7 @@ import com.nmph.setly.data.AchievementRepository
         ProgressEntity::class,
         AchievementEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -363,6 +363,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v13: убираем «глупые» трофеи. Новые записи добавит seed-callback при открытии БД.
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val removed = listOf(
+                    "first_workout", "first_set", "first_day", "first_finish", "novice",
+                    "organizer", "worker", "athlete", "heavy", "titan", "sleep_setup",
+                    "auto_rest", "perfectionist", "editor", "first_gym",
+                )
+                removed.forEach { id ->
+                    db.execSQL("DELETE FROM `achievements` WHERE `id` = ?", arrayOf(id))
+                }
+            }
+        }
+
         private val ACHIEVEMENT_SEED_CALLBACK = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
@@ -400,7 +414,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-                        MIGRATION_10_11, MIGRATION_11_12,
+                        MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
                     )
                     .addCallback(ACHIEVEMENT_SEED_CALLBACK)
                     .build().also { INSTANCE = it }

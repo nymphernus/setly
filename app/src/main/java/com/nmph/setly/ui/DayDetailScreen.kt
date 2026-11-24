@@ -1,6 +1,7 @@
 package com.nmph.setly.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.data.local.WorkoutPlan
@@ -39,6 +42,7 @@ import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.DayDetailViewModel
 import com.nmph.setly.ui.viewmodel.DayExerciseItem
+import com.nmph.setly.ui.viewmodel.DayWorkoutItem
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -50,11 +54,14 @@ fun DayDetailScreen(
     viewModel: DayDetailViewModel,
     workouts: List<WorkoutPlan> = emptyList(),
     onFillDay: (WorkoutPlan) -> Unit = {},
+    onMessage: (String) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
     var showWorkoutPicker by remember { mutableStateOf(false) }
+    var actualWorkout by remember { mutableStateOf<DayWorkoutItem?>(null) }
+    var actualInputs by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     val title = runCatching { LocalDate.parse(date) }
         .getOrNull()
         ?.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("ru")))
@@ -142,6 +149,18 @@ fun DayDetailScreen(
                                 item.exercises.forEach { exercise ->
                                     DayExerciseRow(exercise)
                                 }
+                                Button(
+                                    onClick = {
+                                        actualInputs = item.exercises.associate {
+                                            it.exercise.id to it.completedReps.toString()
+                                        }
+                                        actualWorkout = item
+                                    },
+                                    enabled = item.exercises.isNotEmpty(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Заполнить фактические данные")
+                                }
                             }
                         }
                     }
@@ -178,6 +197,50 @@ fun DayDetailScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showWorkoutPicker = false }) { Text("Отмена") }
+            },
+        )
+    }
+
+    val editing = actualWorkout
+    if (editing != null) {
+        AlertDialog(
+            onDismissRequest = { actualWorkout = null },
+            title = { Text("Фактические повторения") },
+            text = {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                ) {
+                    items(editing.exercises, key = { it.exercise.id }) { exercise ->
+                        OutlinedTextField(
+                            value = actualInputs[exercise.exercise.id].orEmpty(),
+                            onValueChange = { value ->
+                                actualInputs = actualInputs + (exercise.exercise.id to value)
+                            },
+                            label = { Text("${exercise.exercise.name}: фактически") },
+                            supportingText = {
+                                Text("План на сегодня: ${exercise.adjustedTargetReps} раз")
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.saveActualReps(
+                            editing.workout.id,
+                            actualInputs.mapValues { it.value.toIntOrNull() ?: 0 },
+                            onMessage,
+                        )
+                        actualWorkout = null
+                    },
+                ) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { actualWorkout = null }) { Text("Отмена") }
             },
         )
     }

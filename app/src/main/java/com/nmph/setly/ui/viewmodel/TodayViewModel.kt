@@ -17,6 +17,9 @@ import com.nmph.setly.utils.AchievementChecker
 import com.nmph.setly.utils.AchievementContext
 import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -52,6 +55,17 @@ data class TodayWorkoutItem(
     val isDone: Boolean get() = totalSets > 0 && completedSets == totalSets
 }
 
+/** Фаза таймера: синее выполнение подхода или оранжевый отдых. */
+enum class TimerPhase { EXECUTION, REST }
+
+data class WorkoutTimerState(
+    val isActive: Boolean = false,
+    val phase: TimerPhase = TimerPhase.EXECUTION,
+    val timeLeft: Int = 0,
+    val totalSeconds: Int = 0,
+    val exerciseId: Int? = null,
+)
+
 class TodayViewModel(
     private val workoutDao: WorkoutDao,
     private val exerciseDao: ExerciseDao,
@@ -73,6 +87,10 @@ class TodayViewModel(
 
     private val allProgress: StateFlow<List<ProgressEntity>> = progressDao.observeAllProgress()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _timer = MutableStateFlow(WorkoutTimerState())
+    val timer: StateFlow<WorkoutTimerState> = _timer
+    private var timerJob: Job? = null
 
     val todayWorkouts: StateFlow<List<TodayWorkoutItem>> = combine(
         workouts,
@@ -111,6 +129,52 @@ class TodayViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun getTodayDate(): String = todayDate
+
+    /**
+     * Запускает «Выполнение» длительностью estimatedTimePerSet, затем автоматически
+     * «Отдых» из рассчитанного restMinutes. Повторное нажатие чекбокса снимает таймер.
+     */
+    fun startSetTimer(exerciseId: Int, reps: Int, unit: String, restMinutes: Int) {
+        cancelTimer()
+        val executionSeconds = DistributionHelper.estimatedTimePerSet(reps, unit) * 60
+        val restSeconds = restMinutes.coerceAtLeast(0) * 60
+        if (executionSeconds <= 0 && restSeconds <= 0) return
+        timerJob = viewModelScope.launch {
+            if (executionSeconds > 0) {
+                countdown(executionSeconds, TimerPhase.EXECUTION, exerciseId)
+            }
+            if (restSeconds > 0) {
+                countdown(restSeconds, TimerPhase.REST, exerciseId)
+            }
+            _timer.value = WorkoutTimerState()
+        }
+    }
+
+    fun cancelTimer() {
+        timerJob?.cancel()
+        timerJob = null
+        _timer.value = WorkoutTimerState()
+    }
+
+    private suspend fun countdown(totalSeconds: Int, phase: TimerPhase, exerciseId: Int) {
+        _timer.value = WorkoutTimerState(
+            isActive = true,
+            phase = phase,
+            timeLeft = totalSeconds,
+            totalSeconds = totalSeconds,
+            exerciseId = exerciseId,
+        )
+        for (left in totalSeconds - 1 downTo 0) {
+            delay(1_000)
+            _timer.value = WorkoutTimerState(
+                isActive = true,
+                phase = phase,
+                timeLeft = left,
+                totalSeconds = totalSeconds,
+                exerciseId = exerciseId,
+            )
+        }
+    }
 
     /** Переключает один подход по индексу; остальные отметки не затрагиваются. */
     fun toggleSet(exerciseId: Int, setIndex: Int) {
@@ -199,6 +263,11 @@ class TodayViewModel(
                 progressDao = progressDao,
             ),
         )
+    }
+
+    override fun onCleared() {
+        cancelTimer()
+        super.onCleared()
     }
 
     fun isWorkoutComplete(workoutId: Int): Boolean =

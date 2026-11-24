@@ -37,6 +37,8 @@ import com.nmph.setly.R
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.theme.IconAccent
+import com.nmph.setly.ui.viewmodel.TimerPhase
+import com.nmph.setly.ui.viewmodel.WorkoutTimerState
 
 /** Универсальное пустое состояние с иконкой, пояснением и действием. */
 @Composable
@@ -192,5 +194,48 @@ fun RestTimer(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
+    }
+}
+
+/** Круговой таймер подхода: синий «Выполнение», оранжевый «Отдых». */
+@Composable
+fun PhaseTimer(
+    state: WorkoutTimerState,
+    modifier: Modifier = Modifier,
+) {
+    val isExecution = state.phase == TimerPhase.EXECUTION
+    val phaseColor = if (isExecution) Color(0xFF2196F3) else Color(0xFFFF9800)
+    val phaseLabel = if (isExecution) "Выполнение" else "Отдых"
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, AppCards.Shape)
+            .padding(vertical = AppSpacing.Block),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                progress = {
+                    state.timeLeft.toFloat() / state.totalSeconds.coerceAtLeast(1).toFloat()
+                },
+                modifier = Modifier.size(180.dp),
+                color = phaseColor,
+                trackColor = MaterialTheme.colorScheme.surface,
+                strokeWidth = 10.dp,
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "%02d:%02d".format(state.timeLeft / 60, state.timeLeft % 60),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    phaseLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = phaseColor,
+                )
+            }
+        }
     }
 }

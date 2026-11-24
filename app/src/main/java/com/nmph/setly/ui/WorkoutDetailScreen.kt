@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -36,33 +37,31 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.ui.components.EmptyStateView
-import com.nmph.setly.ui.components.RestTimer
+import com.nmph.setly.ui.components.PhaseTimer
 import com.nmph.setly.ui.components.SetPill
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.ExerciseTotal
+import com.nmph.setly.ui.viewmodel.TimerPhase
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.WorkoutDetailViewModel
 import com.nmph.setly.utils.DistributionHelper
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,14 +75,14 @@ fun WorkoutDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
+    val timerState by todayViewModel.timer.collectAsStateWithLifecycle()
     val totals by detailViewModel.totals.collectAsStateWithLifecycle()
     val adjustedTargets by detailViewModel.adjustedTargets.collectAsStateWithLifecycle()
     val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
     val todayExercises = todayItem?.exercises?.associateBy { it.exercise.id }.orEmpty()
 
-    var timeLeft by rememberSaveable { mutableStateOf(0) }
-    var timerRun by rememberSaveable { mutableStateOf(0) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    var showCancelDialog by remember { mutableStateOf(false) }
+    var pendingToggle by remember { mutableStateOf<Pair<() -> Unit, () -> Unit>?>(null) }
 
     val totalSets = todayItem?.totalSets ?: 0
     val completedSets = todayItem?.completedSets ?: 0
@@ -96,7 +95,6 @@ fun WorkoutDetailScreen(
     } else {
         DistributionHelper.restMinutes(workout.workout.sleepStart, workout.workout.sleepEnd, totalSets)
     }
-    val totalSeconds = restMinutes * 60
 
     // Комплексные повторы: каждый круг объединяет по одному подходу каждого упражнения.
     val rounds = workout?.exercises?.map { planned ->
@@ -116,6 +114,7 @@ fun WorkoutDetailScreen(
                         RoundSet(
                             exerciseId = planned.exercise.id,
                             name = planned.exercise.name,
+                            unit = planned.exercise.unit,
                             reps = reps,
                             index = index,
                             checked = index in done,
@@ -125,23 +124,32 @@ fun WorkoutDetailScreen(
             )
         }
     }.orEmpty()
+    val completedRounds = rounds.count { it.isDone }
 
-    LaunchedEffect(timerRun, totalSeconds) {
-        if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
-        var remaining = if (timeLeft > 0) timeLeft else totalSeconds
-        timeLeft = remaining
-        while (remaining > 0) {
-            delay(1_000)
-            remaining--
-            timeLeft = remaining
+    /** Повторное нажатие во время таймера требует подтверждения отмены. */
+    fun onToggleRequested(
+        exerciseId: Int,
+        reps: Int,
+        unit: String,
+        apply: () -> Unit,
+        startTimer: Boolean,
+    ) {
+        val start: () -> Unit = if (startTimer) {
+            { todayViewModel.startSetTimer(exerciseId, reps, unit, restMinutes) }
+        } else {
+            {}
         }
-        snackbarHostState.showSnackbar("Отдых окончен! Пора делать следующий подход")
-        timerRun = 0
+        if (timerState.isActive) {
+            pendingToggle = apply to start
+            showCancelDialog = true
+        } else {
+            apply()
+            start()
+        }
     }
 
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -160,11 +168,16 @@ fun WorkoutDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (timerRun > 0 && timeLeft > 0) {
+                        if (timerState.isActive) {
                             Text(
-                                "Отдых: %02d:%02d".format(timeLeft / 60, timeLeft % 60),
+                                "${if (timerState.phase == TimerPhase.EXECUTION) "Выполнение" else "Отдых"}: " +
+                                    "%02d:%02d".format(timerState.timeLeft / 60, timerState.timeLeft % 60),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary,
+                                color = if (timerState.phase == TimerPhase.EXECUTION) {
+                                    Color(0xFF2196F3)
+                                } else {
+                                    Color(0xFFFF9800)
+                                },
                             )
                         }
                     }
@@ -191,8 +204,17 @@ fun WorkoutDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
                     ) {
                         Text(
-                            "Выполнено $completedSets из $totalSets подходов. Осталось $remainingReps повторений",
+                            if (rounds.isNotEmpty()) {
+                                "Выполнено $completedRounds из ${rounds.size} кругов"
+                            } else {
+                                "Выполнено $completedSets из $totalSets подходов"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Осталось $remainingReps повторений",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(
@@ -269,11 +291,11 @@ fun WorkoutDetailScreen(
 
             item {
                 AnimatedVisibility(
-                    visible = timerRun > 0 && timeLeft > 0 && totalSeconds > 0,
+                    visible = timerState.isActive,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically(),
                 ) {
-                    RestTimer(timeLeft = timeLeft, totalSeconds = totalSeconds)
+                    PhaseTimer(state = timerState)
                 }
             }
 
@@ -305,17 +327,16 @@ fun WorkoutDetailScreen(
                         periodDays = workout.workout.periodDays,
                         total = totals.byExercise[planned.exercise.id],
                         onSetClick = { index, wasChecked ->
-                            todayViewModel.toggleSet(planned.exercise.id, index)
-                            if (wasChecked ||
-                                (todayExercise?.completedSetsCount ?: 0) + 1 >=
-                                (todayExercise?.sets?.size ?: 0)
-                            ) {
-                                timerRun = 0
-                                timeLeft = 0
-                            } else {
-                                timeLeft = totalSeconds
-                                timerRun++
-                            }
+                            val reps = todayExercise?.sets?.getOrNull(index)
+                                ?: plannedSets.getOrNull(index)
+                                ?: planned.repsPerSet
+                            onToggleRequested(
+                                exerciseId = planned.exercise.id,
+                                reps = reps,
+                                unit = planned.exercise.unit,
+                                apply = { todayViewModel.toggleSet(planned.exercise.id, index) },
+                                startTimer = !wasChecked,
+                            )
                         },
                     )
                 }
@@ -332,31 +353,54 @@ fun WorkoutDetailScreen(
                     RoundCard(
                         round = round,
                         onRoundClick = {
-                            todayViewModel.toggleRound(round.sets.map { it.exerciseId to it.index })
-                            if (round.isDone) {
-                                // Снимаем отметки — отдых не нужен.
-                                timerRun = 0
-                                timeLeft = 0
-                            } else {
-                                // Круг завершён — запускаем отдых перед следующим.
-                                timeLeft = totalSeconds
-                                timerRun++
-                            }
+                            val first = round.sets.firstOrNull()
+                            onToggleRequested(
+                                exerciseId = first?.exerciseId ?: -1,
+                                reps = first?.reps ?: 0,
+                                unit = first?.unit ?: "",
+                                apply = {
+                                    todayViewModel.toggleRound(
+                                        round.sets.map { it.exerciseId to it.index },
+                                    )
+                                },
+                                startTimer = !round.isDone,
+                            )
                         },
                         onSetClick = { item, wasChecked ->
-                            todayViewModel.toggleSet(item.exerciseId, item.index)
-                            if (wasChecked) {
-                                timerRun = 0
-                                timeLeft = 0
-                            } else {
-                                timeLeft = totalSeconds
-                                timerRun++
-                            }
+                            onToggleRequested(
+                                exerciseId = item.exerciseId,
+                                reps = item.reps ?: 0,
+                                unit = item.unit,
+                                apply = { todayViewModel.toggleSet(item.exerciseId, item.index) },
+                                startTimer = !wasChecked,
+                            )
                         },
                     )
                 }
             }
         }
+    }
+
+    if (showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            title = { Text("Отменить подход?") },
+            text = { Text("Таймер отдыха будет сброшен.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        todayViewModel.cancelTimer()
+                        pendingToggle?.first?.invoke()
+                        pendingToggle?.second?.invoke()
+                        pendingToggle = null
+                        showCancelDialog = false
+                    },
+                ) { Text("Да, отменить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelDialog = false }) { Text("Нет, продолжить") }
+            },
+        )
     }
 }
 
@@ -466,6 +510,7 @@ private fun ExerciseSetsCard(
 private data class RoundSet(
     val exerciseId: Int,
     val name: String,
+    val unit: String,
     val reps: Int?,
     val index: Int,
     val checked: Boolean,
@@ -479,7 +524,6 @@ private data class Round(
     val isDone: Boolean get() = sets.isNotEmpty() && sets.all { it.checked }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoundCard(
     round: Round,
@@ -487,21 +531,25 @@ private fun RoundCard(
     onSetClick: (RoundSet, Boolean) -> Unit,
 ) {
     val backgroundColor by animateColorAsState(
-        targetValue = if (round.isDone) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
+        targetValue = if (round.isDone) Color(0xFF2E7D32) else MaterialTheme.colorScheme.surface,
         animationSpec = tween(250),
         label = "roundBackground",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (round.isDone) Color.White else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(250),
+        label = "roundContent",
     )
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
-        shape = AppCards.Shape,
-        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = AppCards.Shape, // RoundedCornerShape(16.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation), // 2.dp
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor,
+            contentColor = contentColor,
+        ),
     ) {
         Column(
             Modifier
@@ -510,36 +558,60 @@ private fun RoundCard(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onRoundClick),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Checkbox(checked = round.isDone, onCheckedChange = { onRoundClick() })
+                Checkbox(
+                    checked = round.isDone,
+                    onCheckedChange = { onRoundClick() },
+                )
                 Text(
                     "Круг ${round.number}",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.weight(1f),
+                    color = if (round.isDone) Color.White else MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onRoundClick),
                 )
                 Text(
                     "${round.sets.count { it.checked }}/${round.sets.size}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (round.isDone) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+            AnimatedVisibility(
+                visible = !round.isDone,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
             ) {
-                round.sets.forEach { item ->
-                    SetPill(
-                        reps = item.reps ?: 0,
-                        checked = item.checked,
-                        compact = true,
-                        onClick = { onSetClick(item, item.checked) },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner)) {
+                    round.sets.forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = item.checked,
+                                onCheckedChange = { onSetClick(item, item.checked) },
+                            )
+                            Text(
+                                "${item.name} · цель: ${item.reps ?: 0} ${item.unit}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onSetClick(item, item.checked) },
+                            )
+                        }
+                    }
                 }
+            }
+            if (round.isDone) {
+                Text(
+                    "Круг выполнен",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                )
             }
         }
     }

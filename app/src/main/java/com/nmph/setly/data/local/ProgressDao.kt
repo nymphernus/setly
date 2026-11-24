@@ -25,4 +25,7 @@ interface ProgressDao {
     // Upsert вместо insert: повторное нажатие +1/-1 обновляет ту же запись "дата_упражнение".
     @Upsert
     suspend fun insertOrUpdate(progress: ProgressEntity)
+
+    @Query("DELETE FROM progress")
+    suspend fun clearAllProgress()
 }

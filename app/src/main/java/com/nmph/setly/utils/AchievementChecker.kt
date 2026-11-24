@@ -51,7 +51,7 @@ private data class DayStats(
 )
 
 /**
- * Проверяет условия 50 трофеев по текущему состоянию БД.
+ * Проверяет условия 40 трофеев по текущему состоянию БД.
  * Вызывается после сохранения прогресса и после сохранения тренировки.
  */
 object AchievementChecker {
@@ -74,6 +74,7 @@ object AchievementChecker {
             14 to "streak_14",
             30 to "streak_30",
             100 to "streak_100",
+            180 to "streak_180",
         ).forEach { (days, id) ->
             if (longest >= days) unlock(context, id)
         }
@@ -88,10 +89,8 @@ object AchievementChecker {
 
     suspend fun checkTotalReps(context: AchievementContext, data: AchievementSnapshot) {
         val (_, totalReps) = completedStats(data)
-        if (totalReps >= 50) unlock(context, "worker")
-        if (totalReps >= 500) unlock(context, "athlete")
-        if (totalReps >= 1000) unlock(context, "heavy")
-        if (totalReps >= 10_000) unlock(context, "titan")
+        if (totalReps >= 5_000) unlock(context, "volume_5000")
+        if (totalReps >= 25_000) unlock(context, "volume_25000")
 
         val repsByExercise = repsByExercise(data)
         val nameReps = { keyword: String ->
@@ -118,10 +117,6 @@ object AchievementChecker {
     }
 
     suspend fun checkSetCount(context: AchievementContext, data: AchievementSnapshot) {
-        val (totalSets, _) = completedStats(data)
-        if (totalSets >= 1) unlock(context, "first_set")
-        if (totalSets >= 10) unlock(context, "novice")
-
         val handSets = data.exercises
             .filter { it.category == "Руки" }
             .sumOf { exerciseIdSets(data, it.id) }
@@ -130,13 +125,7 @@ object AchievementChecker {
         val today = LocalDate.now()
         val daily = dailyCompletion(data, today)
         if (daily.first > 0 && daily.first == daily.second) {
-            unlock(context, "first_day")
             unlock(context, "no_skip")
-        }
-
-        if (workoutCompletion(data).any { it.second }) {
-            unlock(context, "first_finish")
-            unlock(context, "perfectionist")
         }
     }
 
@@ -182,28 +171,15 @@ object AchievementChecker {
     }
 
     suspend fun checkWorkoutSettings(context: AchievementContext, data: AchievementSnapshot) {
-        if (data.workouts.isNotEmpty()) {
-            unlock(context, "first_workout")
-            unlock(context, "auto_rest")
-        }
-        if (data.workouts.any { it.exercises.size >= 2 }) unlock(context, "organizer")
         if (data.workouts.any { it.workout.periodDays >= 30 }) unlock(context, "planner")
         if (data.workouts.any { it.workout.periodDays >= 90 }) unlock(context, "long_term")
-        if (data.workouts.any {
-                it.workout.sleepStart.isNotBlank() && it.workout.sleepEnd.isNotBlank()
-            }
-        ) {
-            unlock(context, "sleep_setup")
-        }
         if (data.workouts.any { totalPlannedSets(it) >= 10 }) unlock(context, "circles")
         if (data.workouts.size >= 100) unlock(context, "legend")
 
-        if (data.exercises.size >= 3) unlock(context, "first_gym")
         if (data.exercises.size >= 10) unlock(context, "expert")
 
         if ("reps" in context.changedFields) unlock(context, "dynamic")
         if ("sleep" in context.changedFields) unlock(context, "adapt")
-        if ("name" in context.changedFields) unlock(context, "editor")
     }
 
     /** Прямая разблокировка для событий без полного снимка (синхронизация, уведомление, календарь). */
@@ -368,28 +344,4 @@ object AchievementChecker {
         }
         return planned to done
     }
-
-    private fun workoutCompletion(data: AchievementSnapshot): List<Pair<WorkoutPlan, Boolean>> =
-        data.workouts.map { plan ->
-            val start = java.time.Instant.ofEpochMilli(plan.workout.startDate)
-                .atZone(java.time.ZoneId.systemDefault())
-                .toLocalDate()
-            val end = start.plusDays(plan.workout.periodDays.toLong() - 1)
-            var planned = 0
-            var done = 0
-            plan.exercises.forEach { exercise ->
-                val sets = setsFor(exercise, plan.workout)
-                planned += sets.size
-                data.progress
-                    .filter { record ->
-                        val recordDate = runCatching { LocalDate.parse(record.date) }.getOrNull()
-                        record.exerciseId == exercise.exercise.id &&
-                            recordDate != null && !recordDate.isBefore(start) && !recordDate.isAfter(end)
-                    }
-                    .forEach { record ->
-                        done += record.completedSets.distinct().count { index -> index in sets.indices }
-                    }
-            }
-            plan to (planned > 0 && done >= planned)
-        }
 }

@@ -161,6 +161,7 @@ class MainActivity : ComponentActivity() {
                 val lastSyncAt by syncManager.lastSyncAt.collectAsState()
                 val lastSyncError by syncManager.lastSyncError.collectAsState()
                 val isSyncing by syncManager.isSyncing.collectAsState()
+                val backups by workoutVM.backups.collectAsState()
                 val todayWorkouts by todayVM.todayWorkouts.collectAsState()
 
                 // Напоминание привязано к конкретной активной тренировке и её настройкам.
@@ -256,22 +257,28 @@ class MainActivity : ComponentActivity() {
                                                 ?.let { "Ошибка синхронизации: $it" }
                                                 ?: "Не удалось синхронизировать данные"
                                         }
-                                        if (success) {
-                                            CoroutineScope(Dispatchers.IO).launch {
-                                                AchievementChecker.unlockDirect(
-                                                    database.achievementDao(), "sync",
-                                                )
-                                                AchievementChecker.unlockDirect(
-                                                    database.achievementDao(), "cloud",
-                                                )
-                                            }
-                                        }
                                     }
                                 }
                             },
                             onSignOut = {
                                 authManager.signOut()
                                 snackbarMessage = "Вы вышли из аккаунта"
+                            },
+                            backups = backups,
+                            onBackup = {
+                                if (!authManager.isSignedIn) {
+                                    snackbarMessage = "Войдите через Google для бекапа"
+                                } else {
+                                    workoutVM.createBackup { snackbarMessage = it }
+                                }
+                            },
+                            onLoadBackups = {
+                                workoutVM.loadBackups { message ->
+                                    if (!message.startsWith("Найдено")) snackbarMessage = message
+                                }
+                            },
+                            onRestore = { backup ->
+                                workoutVM.restoreBackup(backup) { snackbarMessage = it }
                             },
                         )
                     }
@@ -378,6 +385,7 @@ class MainActivity : ComponentActivity() {
                             key = "day_$date",
                             factory = DayDetailViewModelFactory(
                                 date, database.workoutDao(), database.progressDao(),
+                                database.exerciseDao(), syncManager, database.achievementDao(),
                             ),
                         )
                         DayDetailScreen(
@@ -387,6 +395,7 @@ class MainActivity : ComponentActivity() {
                             onFillDay = { plan ->
                                 dayVM.fillDay(plan) { message -> snackbarMessage = message }
                             },
+                            onMessage = { message -> snackbarMessage = message },
                             onBack = { navController.popBackStack() },
                         )
                     }
