@@ -42,6 +42,18 @@ Setly — трекер тренировок для Android, который бе�
 
 В профиле всегда видно, когда была последняя синхронизация.
 
+## Настройка Firebase для разработки
+
+Без Firebase приложение работает точно так же — облако нужно только для синхронизации и бекапов. Чтобы его включить:
+
+1. Создайте проект в [Firebase Console](https://console.firebase.google.com/).
+2. Добавьте Android-приложение с package name `com.nmph.setly`.
+3. Скачайте `google-services.json` и положите его в папку `app/`.
+4. Включите Authentication (Google) и Firestore Database.
+5. Добавьте SHA-1 вашего debug-keystore в настройки Firebase.
+
+Файл `google-services.json` намеренно не хранится в репозитории. Как шаблон используйте `app/google-services.example.json`: скопируйте его под нужным именем и подставьте свои значения.
+
 ## Если хотите собрать сами
 
 Приложение рассчитано на Android 10 и новее. Установите JDK 17 и Android SDK и выполните в PowerShell:

@@ -1,15 +1,33 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Gradle
+.gradle/
+build/
+
+# Local configuration
 local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Outputs
+*.apk
+*.aab
+output-metadata.json
+
+# Keystore (НИКОГДА не коммитить)
+*.jks
+*.keystore
+key.properties
+
+# Firebase / Google Services (содержит конфигурацию проекта)
+google-services.json
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
