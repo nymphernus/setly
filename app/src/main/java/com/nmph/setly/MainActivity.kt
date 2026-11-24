@@ -33,10 +33,13 @@ import com.nmph.setly.data.settings.AppSettings
 import com.nmph.setly.data.sync.SyncManager
 import com.nmph.setly.ui.AddEditExerciseScreen
 import com.nmph.setly.ui.AddEditWorkoutScreen
+import com.nmph.setly.ui.DayDetailScreen
 import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.SplashScreen
 import com.nmph.setly.ui.WorkoutDetailScreen
 import com.nmph.setly.ui.theme.SetlyTheme
+import com.nmph.setly.ui.viewmodel.DayDetailViewModel
+import com.nmph.setly.ui.viewmodel.DayDetailViewModelFactory
 import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.ExerciseViewModelFactory
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
@@ -45,11 +48,14 @@ import com.nmph.setly.ui.viewmodel.ProfileViewModel
 import com.nmph.setly.ui.viewmodel.ProfileViewModelFactory
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.TodayViewModelFactory
+import com.nmph.setly.ui.viewmodel.WorkoutDetailViewModel
+import com.nmph.setly.ui.viewmodel.WorkoutDetailViewModelFactory
 import com.nmph.setly.ui.viewmodel.WorkoutViewModel
 import com.nmph.setly.ui.viewmodel.WorkoutViewModelFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -57,6 +63,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private lateinit var syncManager: SyncManager
     private val signInRequestCode = 1001
+
+    // Уведомление/внешняя deep link может прийти до создания NavHost или уже в запущенном приложении.
+    private val pendingWorkoutId = mutableStateOf<Int?>(null)
 
     // Уведомления опциональны: отказ пользователя не ломает работу приложения.
     private val requestNotificationPermission =
@@ -69,6 +78,8 @@ class MainActivity : ComponentActivity() {
         val settings = AppSettings(this)
         // Ранняя инициализация БД: падение схемы проявится сразу, а не при первом чтении.
         val database = AppDatabase.getDatabase(this)
+
+        handleDeepLink(intent)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -98,6 +109,18 @@ class MainActivity : ComponentActivity() {
 
             SetlyTheme(darkTheme = darkTheme) {
                 val navController = rememberNavController()
+
+                LaunchedEffect(pendingWorkoutId.value) {
+                    val id = pendingWorkoutId.value ?: return@LaunchedEffect
+                    if (navController.currentDestination?.route == "splash") {
+                        navController.navigate("home_root") {
+                            popUpTo("splash") { inclusive = true }
+                        }
+                    }
+                    navController.navigate("workout/$id") { launchSingleTop = true }
+                    pendingWorkoutId.value = null
+                }
+
                 val exerciseVM: ExerciseViewModel = viewModel(
                     factory = ExerciseViewModelFactory(database.exerciseDao(), database.workoutDao()),
                 )
@@ -124,6 +147,7 @@ class MainActivity : ComponentActivity() {
                 val exercises by exerciseVM.exercises.collectAsState()
                 val stats by profileVM.stats.collectAsState()
                 val lastSyncAt by syncManager.lastSyncAt.collectAsState()
+                val lastSyncError by syncManager.lastSyncError.collectAsState()
                 val isSyncing by syncManager.isSyncing.collectAsState()
                 val todayWorkouts by todayVM.todayWorkouts.collectAsState()
 
@@ -147,6 +171,7 @@ class MainActivity : ComponentActivity() {
                             isSignedIn = authManager.isSignedIn,
                             email = authManager.currentUser?.email,
                             lastSyncAt = lastSyncAt,
+                            lastSyncError = lastSyncError,
                             isSyncing = isSyncing,
                             darkTheme = darkTheme,
                             notificationsEnabled = notificationsEnabled,
@@ -154,6 +179,7 @@ class MainActivity : ComponentActivity() {
                             onSnackbarShown = { snackbarMessage = null },
                             onAddWorkout = { navController.navigate("edit_workout/-1") },
                             onEditExercise = { id -> navController.navigate("exercise/$id") },
+                            onOpenDay = { date -> navController.navigate("day_detail/$date") },
                             onOpenWorkout = { id -> navController.navigate("workout/$id") },
                             onEditWorkout = { id -> navController.navigate("edit_workout/$id") },
                             onDeleteWorkout = { item ->
@@ -164,6 +190,7 @@ class MainActivity : ComponentActivity() {
                             onToggleDarkTheme = { settings.setDarkTheme(it) },
                             onToggleNotifications = { settings.setNotificationsEnabled(it) },
                             onSignIn = {
+                                syncManager.clearError()
                                 authManager.signInWithGoogle(this@MainActivity, signInRequestCode)
                             },
                             onSync = {
@@ -174,7 +201,9 @@ class MainActivity : ComponentActivity() {
                                         snackbarMessage = if (success) {
                                             "Синхронизация завершена"
                                         } else {
-                                            "Не удалось синхронизировать данные"
+                                            syncManager.lastSyncError.value
+                                                ?.let { "Ошибка синхронизации: $it" }
+                                                ?: "Не удалось синхронизировать данные"
                                         }
                                     }
                                 }
@@ -194,9 +223,16 @@ class MainActivity : ComponentActivity() {
                     ) { entry ->
                         val id = entry.arguments?.getInt("workoutId") ?: -1
                         val selectedWorkout: WorkoutPlan? = workouts.firstOrNull { it.workout.id == id }
+                        val detailVM: WorkoutDetailViewModel = viewModel(
+                            key = "workout_$id",
+                            factory = WorkoutDetailViewModelFactory(
+                                id, database.workoutDao(), database.progressDao(),
+                            ),
+                        )
                         WorkoutDetailScreen(
                             workout = selectedWorkout,
                             todayViewModel = todayVM,
+                            detailViewModel = detailVM,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate("edit_workout/$id") },
                             onComplete = {
@@ -218,20 +254,23 @@ class MainActivity : ComponentActivity() {
                         } else {
                             workouts.firstOrNull { it.workout.id == id }
                         }
-                        val initialTargets = editingPlan?.exercises
-                            ?.associate { it.exercise.id to it.dailyTargetReps }
+                        val initialSettings = editingPlan?.exercises
+                            ?.associate { it.exercise.id to (it.dailyTargetReps to it.repsPerSet) }
                             ?: emptyMap()
                         AddEditWorkoutScreen(
                             workout = editingPlan,
                             availableExercises = exercises,
-                            initialTargets = initialTargets,
-                            onSave = { name, period, sleepStart, sleepEnd, targets ->
+                            initialSettings = initialSettings,
+                            onSave = { name, period, sleepStart, sleepEnd, settings ->
                                 workoutVM.saveWorkout(
-                                    id, name, period, sleepStart, sleepEnd, targets,
+                                    id, name, period, sleepStart, sleepEnd, settings,
                                 ) { message ->
                                     snackbarMessage = message
                                     navController.popBackStack()
                                 }
+                            },
+                            onCreateExercise = { name, description, onCreated ->
+                                exerciseVM.addExercise(name, description, onCreated)
                             },
                             onBack = { navController.popBackStack() },
                         )
@@ -247,11 +286,13 @@ class MainActivity : ComponentActivity() {
                         val editing = if (id != -1) exerciseVM.getExerciseById(id) else null
                         AddEditExerciseScreen(
                             exercise = editing,
-                            onSave = { name, perSet ->
+                            onSave = { name, description ->
                                 if (editing == null) {
-                                    exerciseVM.addExercise(name, perSet)
+                                    exerciseVM.addExercise(name, description)
                                 } else {
-                                    exerciseVM.updateExercise(editing.copy(name = name, repsPerSet = perSet))
+                                    exerciseVM.updateExercise(
+                                        editing.copy(name = name, description = description),
+                                    )
                                 }
                                 snackbarMessage = "Упражнение сохранено"
                                 navController.popBackStack()
@@ -259,9 +300,50 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable(
+                        route = "day_detail/{date}",
+                        arguments = listOf(navArgument("date") { type = NavType.StringType }),
+                    ) { entry ->
+                        val date = entry.arguments?.getString("date")
+                            ?: LocalDate.now().toString()
+                        val dayVM: DayDetailViewModel = viewModel(
+                            key = "day_$date",
+                            factory = DayDetailViewModelFactory(
+                                date, database.workoutDao(), database.progressDao(),
+                            ),
+                        )
+                        DayDetailScreen(
+                            date = date,
+                            viewModel = dayVM,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        if (intent == null) return
+        val fromExtra = intent.getIntExtra(EXTRA_WORKOUT_ID, -1).takeIf { it > 0 }
+        val fromUri = intent.data?.let { uri ->
+            if (uri.scheme == DEEP_LINK_SCHEME && uri.host == HOST_WORKOUT_DETAIL) {
+                uri.lastPathSegment?.toIntOrNull()?.takeIf { it > 0 }
+            } else {
+                null
+            }
+        }
+        val workoutId = fromExtra ?: fromUri
+        if (workoutId != null) pendingWorkoutId.value = workoutId
+        // Очищаем обработанный intent: поворот экрана не должен открывать тренировку заново.
+        intent.removeExtra(EXTRA_WORKOUT_ID)
+        intent.data = null
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -273,5 +355,11 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this@MainActivity, "Ошибка входа: ${e.message}", Toast.LENGTH_LONG).show()
                 }
         }
+    }
+
+    private companion object {
+        const val EXTRA_WORKOUT_ID = "workoutId"
+        const val DEEP_LINK_SCHEME = "setly"
+        const val HOST_WORKOUT_DETAIL = "workout_detail"
     }
 }

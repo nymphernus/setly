@@ -7,14 +7,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class DistributionHelperTest {
-    private fun exercise(repsPerSet: Int = 30) = ExerciseEntity(
-        name = "Отжимания",
-        repsPerSet = repsPerSet,
-    )
-
     private fun plan(dailyTargetReps: Int, repsPerSet: Int = 30) = PlannedExercise(
-        exercise = exercise(repsPerSet),
+        exercise = ExerciseEntity(name = "Отжимания"),
         dailyTargetReps = dailyTargetReps,
+        repsPerSet = repsPerSet,
     )
 
     @Test

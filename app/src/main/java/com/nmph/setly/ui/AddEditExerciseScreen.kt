@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,25 +23,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
-import com.nmph.setly.utils.DistributionHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditExerciseScreen(
     exercise: ExerciseEntity?,
-    onSave: (name: String, repsPerSet: Int) -> Unit,
+    onSave: (name: String, description: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val name = rememberSaveable { mutableStateOf(exercise?.name.orEmpty()) }
-    val repsPerSet = rememberSaveable {
-        mutableStateOf(
-            (exercise?.repsPerSet?.takeIf { it > 0 } ?: DistributionHelper.DEFAULT_REPS_PER_SET).toString(),
-        )
-    }
+    val description = rememberSaveable { mutableStateOf(exercise?.description.orEmpty()) }
     val scrollState = rememberScrollState()
 
     Scaffold(
@@ -68,7 +61,8 @@ fun AddEditExerciseScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Опишите упражнение один раз — затем добавляйте его в тренировки.",
+                "Опишите упражнение один раз — затем добавляйте его в тренировки. " +
+                    "Дневную норму и размер подхода зададите в тренировке.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -81,21 +75,21 @@ fun AddEditExerciseScreen(
                 singleLine = true,
             )
             OutlinedTextField(
-                value = repsPerSet.value,
-                onValueChange = { repsPerSet.value = it.filter { char -> char.isDigit() } },
-                label = { Text("Повторений в подходе") },
-                placeholder = { Text("20") },
+                value = description.value,
+                onValueChange = { description.value = it },
+                label = { Text("Описание (необязательно)") },
+                placeholder = { Text("Например, грудь и трицепс") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                maxLines = 4,
             )
 
-            val canSave = name.value.isNotBlank() && (repsPerSet.value.toIntOrNull() ?: 0) > 0
             Button(
                 onClick = {
-                    if (canSave) onSave(name.value.trim(), repsPerSet.value.toInt())
+                    if (name.value.isNotBlank()) {
+                        onSave(name.value.trim(), description.value.trim())
+                    }
                 },
-                enabled = canSave,
+                enabled = name.value.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Сохранить")

@@ -37,7 +37,8 @@ interface WorkoutDao {
         SELECT cr.workoutId AS workoutId,
                e.id AS id,
                e.name AS name,
-               e.repsPerSet AS repsPerSet,
+               e.description AS description,
+               cr.repsPerSet AS repsPerSet,
                cr.dailyTargetReps AS dailyTargetReps
         FROM workout_exercise_cross_ref cr
         INNER JOIN exercises e ON e.id = cr.exerciseId

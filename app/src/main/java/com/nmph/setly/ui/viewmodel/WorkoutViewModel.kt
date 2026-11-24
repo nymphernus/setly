@@ -10,6 +10,7 @@ import com.nmph.setly.data.local.PlannedExerciseRow
 import com.nmph.setly.data.local.WorkoutDao
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseCrossRef
+import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.data.local.withPlans
 import com.nmph.setly.data.sync.SyncManager
@@ -41,7 +42,7 @@ class WorkoutViewModel(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        dailyTargets: Map<Int, Int>,
+        settings: List<WorkoutExerciseSettings>,
         onResult: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -55,11 +56,12 @@ class WorkoutViewModel(
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,
             )
-            val links = dailyTargets.map { (exerciseId, target) ->
+            val links = settings.map { item ->
                 WorkoutExerciseCrossRef(
                     workoutId = 0,
-                    exerciseId = exerciseId,
-                    dailyTargetReps = target.coerceAtLeast(0),
+                    exerciseId = item.exerciseId,
+                    dailyTargetReps = item.dailyTargetReps.coerceAtLeast(0),
+                    repsPerSet = item.repsPerSet.coerceAtLeast(1),
                 )
             }
             // Сначала сохраняем локально (offline-first), затем бэкапим в облако.
@@ -68,7 +70,7 @@ class WorkoutViewModel(
                 workout = workout.copy(id = savedId),
                 exercises = links.mapNotNull { link ->
                     exerciseDao.getExerciseById(link.exerciseId)?.let { exercise ->
-                        PlannedExercise(exercise, link.dailyTargetReps)
+                        PlannedExercise(exercise, link.dailyTargetReps, link.repsPerSet)
                     }
                 },
             )
@@ -92,7 +94,7 @@ class WorkoutViewModel(
     fun syncNow(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             val success = if (syncManager.isSignedIn) {
-                runCatching { syncManager.syncNow() }.isSuccess
+                runCatching { syncManager.syncNow() }.getOrDefault(false)
             } else {
                 false
             }

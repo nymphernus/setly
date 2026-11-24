@@ -56,6 +56,7 @@ fun ProfileScreen(
     email: String?,
     stats: ProfileStats,
     lastSyncAt: Long?,
+    lastSyncError: String?,
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
@@ -67,7 +68,8 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
 ) {
     val syncText = when {
-        isSyncing -> "Синхронизация..."
+        isSyncing -> "Синхронизация... (до 10 секунд)"
+        lastSyncError != null -> "Ошибка синхронизации"
         lastSyncAt != null -> {
             val time = Instant.ofEpochMilli(lastSyncAt)
                 .atZone(ZoneId.systemDefault())
@@ -258,6 +260,13 @@ fun ProfileScreen(
                 )
                 SectionCard {
                     Text(syncText, style = MaterialTheme.typography.bodyMedium)
+                    if (lastSyncError != null) {
+                        Text(
+                            lastSyncError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Button(
                         onClick = onSync,
                         enabled = !isSyncing,
@@ -269,7 +278,7 @@ fun ProfileScreen(
                             modifier = Modifier.size(18.dp),
                         )
                         Text(
-                            if (isSyncing) "Синхронизация..." else "Синхронизировать",
+                            "Синхронизировать",
                             modifier = Modifier.padding(start = AppSpacing.CardInner),
                         )
                     }

@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.nmph.setly.data.local.ExerciseDao
 import com.nmph.setly.data.local.ExerciseEntity
 import com.nmph.setly.data.local.WorkoutDao
-import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -23,15 +22,23 @@ class ExerciseViewModel(
             initialValue = emptyList(),
         )
 
-    /** Глобальное упражнение создаётся только с названием и размером подхода. */
-    fun addExercise(name: String, repsPerSet: Int) {
+    /**
+     * Глобальное упражнение создаётся с названием и описанием. Размер подхода и дневная
+     * цель задаются позже, в настройках конкретной тренировки.
+     */
+    fun addExercise(
+        name: String,
+        description: String = "",
+        onCreated: (Int) -> Unit = {},
+    ) {
         viewModelScope.launch {
-            dao.insert(
+            val id = dao.insertAndGetId(
                 ExerciseEntity(
-                    name = name,
-                    repsPerSet = repsPerSet.coerceAtLeast(1),
+                    name = name.trim(),
+                    description = description.trim(),
                 ),
-            )
+            ).toInt()
+            onCreated(id)
         }
     }
 
@@ -48,10 +55,6 @@ class ExerciseViewModel(
     }
 
     fun getExerciseById(id: Int): ExerciseEntity? = exercises.value.find { it.id == id }
-
-    companion object {
-        val DEFAULT_REPS_PER_SET = DistributionHelper.DEFAULT_REPS_PER_SET
-    }
 }
 
 class ExerciseViewModelFactory(

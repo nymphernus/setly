@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -41,7 +40,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.data.local.ExerciseEntity
@@ -123,8 +121,8 @@ fun ExerciseScreen(
     if (showCreateDialog) {
         CreateExerciseDialog(
             onDismiss = { showCreateDialog = false },
-            onCreate = { name, perSet ->
-                viewModel.addExercise(name, perSet)
+            onCreate = { name, description ->
+                viewModel.addExercise(name, description)
                 showCreateDialog = false
             },
         )
@@ -151,14 +149,10 @@ fun ExerciseScreen(
 @Composable
 private fun CreateExerciseDialog(
     onDismiss: () -> Unit,
-    onCreate: (String, Int) -> Unit,
+    onCreate: (String, String) -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
-    var repsPerSet by rememberSaveable { mutableStateOf("") }
-    var showError by rememberSaveable { mutableStateOf(false) }
-
-    val reps = repsPerSet.toIntOrNull()
-    val isValid = name.isNotBlank() && reps != null && reps > 0
+    var description by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -169,39 +163,24 @@ private fun CreateExerciseDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Название") },
+                    placeholder = { Text("Например, Отжимания") },
                     singleLine = true,
-                    isError = showError && name.isBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = repsPerSet,
-                    onValueChange = { repsPerSet = it },
-                    label = { Text("Повторений в подходе") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = showError && (reps == null || reps <= 0),
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Описание (необязательно)") },
+                    placeholder = { Text("Например, грудь и трицепс") },
                     modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
                 )
-                if (showError && !isValid) {
-                    Text(
-                        "Заполните название и укажите число повторений больше нуля",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
             }
         },
         confirmButton = {
             TextButton(
-                enabled = isValid,
-                onClick = {
-                    val confirmedReps = reps
-                    if (isValid) {
-                        onCreate(name.trim(), confirmedReps)
-                    } else {
-                        showError = true
-                    }
-                },
+                enabled = name.isNotBlank(),
+                onClick = { onCreate(name.trim(), description.trim()) },
             ) { Text("Добавить") }
         },
         dismissButton = {
@@ -235,7 +214,7 @@ private fun ExerciseCard(
                     color = MaterialTheme.colorScheme.tertiary,
                 )
                 Text(
-                    "Подход по ${exercise.repsPerSet} раз",
+                    exercise.description.ifBlank { "Описание не добавлено" },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

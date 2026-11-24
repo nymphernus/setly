@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,11 +27,14 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -38,17 +42,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
+import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.utils.DistributionHelper
 
 private data class SelectedExerciseInput(
     val exerciseId: Int,
     val dailyTargetReps: String,
+    val repsPerSet: String,
 )
 
-private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInput>>, List<Pair<Int, String>>>(
-    save = { state -> state.value.map { it.exerciseId to it.dailyTargetReps } },
-    restore = { saved -> mutableStateOf(saved.map { SelectedExerciseInput(it.first, it.second) }) },
+private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInput>>, List<Triple<Int, String, String>>>(
+    save = { state -> state.value.map { Triple(it.exerciseId, it.dailyTargetReps, it.repsPerSet) } },
+    restore = { saved ->
+        mutableStateOf(saved.map { SelectedExerciseInput(it.first, it.second, it.third) })
+    },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,15 +64,15 @@ private val SelectedExercisesSaver = Saver<MutableState<List<SelectedExerciseInp
 fun AddEditWorkoutScreen(
     workout: WorkoutPlan?,
     availableExercises: List<ExerciseEntity>,
-    initialSelectedIds: Set<Int> = emptySet(),
-    initialTargets: Map<Int, Int> = emptyMap(),
+    initialSettings: Map<Int, Pair<Int, Int>> = emptyMap(),
     onSave: (
         name: String,
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        dailyTargets: Map<Int, Int>,
+        settings: List<WorkoutExerciseSettings>,
     ) -> Unit,
+    onCreateExercise: (name: String, description: String, onCreated: (Int) -> Unit) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -83,21 +91,22 @@ fun AddEditWorkoutScreen(
     }
     val initializedWorkoutId = rememberSaveable { mutableStateOf(Int.MIN_VALUE) }
     val showExercisePicker = rememberSaveable { mutableStateOf(false) }
+    val showCreateDialog = rememberSaveable { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     // План приходит асинхронно; не перезаписываем уже введённые данные при повороте экрана.
-    LaunchedEffect(workout?.workout?.id, initialSelectedIds, initialTargets) {
+    LaunchedEffect(workout?.workout?.id, initialSettings) {
         val incomingId = workout?.workout?.id ?: -1
         if (initializedWorkoutId.value == incomingId) return@LaunchedEffect
         name.value = workout?.workout?.name.orEmpty()
         period.value = workout?.workout?.periodDays?.toString() ?: "30"
         sleepStart.value = workout?.workout?.sleepStart ?: "22:00"
         sleepEnd.value = workout?.workout?.sleepEnd ?: "08:00"
-        val ids = (initialSelectedIds + initialTargets.keys).toList()
-        selectedExercises.value = ids.map { id ->
+        selectedExercises.value = initialSettings.map { (id, settings) ->
             SelectedExerciseInput(
                 exerciseId = id,
-                dailyTargetReps = (initialTargets[id] ?: DistributionHelper.DEFAULT_DAILY_TARGET_REPS).toString(),
+                dailyTargetReps = settings.first.toString(),
+                repsPerSet = settings.second.toString(),
             )
         }
         initializedWorkoutId.value = incomingId
@@ -160,7 +169,6 @@ fun AddEditWorkoutScreen(
 
             Button(
                 onClick = { showExercisePicker.value = true },
-                enabled = availableExercises.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
@@ -174,10 +182,20 @@ fun AddEditWorkoutScreen(
                 SelectedExerciseCard(
                     exercise = exercise,
                     dailyTargetReps = input.dailyTargetReps,
+                    repsPerSet = input.repsPerSet,
                     onTargetChange = { value ->
                         selectedExercises.value = selectedExercises.value.map {
                             if (it.exerciseId == exercise.id) {
                                 it.copy(dailyTargetReps = value)
+                            } else {
+                                it
+                            }
+                        }
+                    },
+                    onRepsPerSetChange = { value ->
+                        selectedExercises.value = selectedExercises.value.map {
+                            if (it.exerciseId == exercise.id) {
+                                it.copy(repsPerSet = value)
                             } else {
                                 it
                             }
@@ -191,17 +209,20 @@ fun AddEditWorkoutScreen(
                 )
             }
 
-            val targetsValid = selectedExercises.value.isNotEmpty() &&
-                selectedExercises.value.all { (it.dailyTargetReps.toIntOrNull() ?: 0) > 0 }
+            val settingsValid = selectedExercises.value.isNotEmpty() &&
+                selectedExercises.value.all {
+                    (it.dailyTargetReps.toIntOrNull() ?: 0) > 0 &&
+                        (it.repsPerSet.toIntOrNull() ?: 0) > 0
+                }
             val canSave = name.value.isNotBlank() &&
                 (period.value.toIntOrNull() ?: 0) > 0 &&
                 isValidTime(sleepStart.value) &&
                 isValidTime(sleepEnd.value) &&
-                targetsValid
+                settingsValid
 
-            if (!targetsValid) {
+            if (!settingsValid) {
                 Text(
-                    "Добавьте упражнение и укажите, сколько раз в день его нужно делать.",
+                    "Добавьте упражнение, дневную норму и число повторений в подходе.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -215,8 +236,12 @@ fun AddEditWorkoutScreen(
                             period.value.toInt(),
                             sleepStart.value,
                             sleepEnd.value,
-                            selectedExercises.value.associate {
-                                it.exerciseId to (it.dailyTargetReps.toIntOrNull() ?: 0)
+                            selectedExercises.value.map {
+                                WorkoutExerciseSettings(
+                                    exerciseId = it.exerciseId,
+                                    dailyTargetReps = it.dailyTargetReps.toIntOrNull() ?: 0,
+                                    repsPerSet = it.repsPerSet.toIntOrNull() ?: 0,
+                                )
                             },
                         )
                     }
@@ -243,9 +268,16 @@ fun AddEditWorkoutScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
+                Button(
+                    onClick = { showCreateDialog.value = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text(" Создать новое упражнение")
+                }
                 if (candidates.isEmpty()) {
                     Text(
-                        "Все созданные упражнения уже добавлены.",
+                        "Все созданные упражнения уже добавлены. Создайте новое, если нужно.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 12.dp),
@@ -256,10 +288,12 @@ fun AddEditWorkoutScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selectedExercises.value = selectedExercises.value + SelectedExerciseInput(
-                                        exerciseId = exercise.id,
-                                        dailyTargetReps = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
-                                    )
+                                    selectedExercises.value = selectedExercises.value +
+                                        SelectedExerciseInput(
+                                            exerciseId = exercise.id,
+                                            dailyTargetReps = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
+                                            repsPerSet = DistributionHelper.DEFAULT_REPS_PER_SET.toString(),
+                                        )
                                     showExercisePicker.value = false
                                 }
                                 .padding(vertical = 14.dp),
@@ -267,11 +301,13 @@ fun AddEditWorkoutScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(exercise.name, style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    "Подход по ${exercise.repsPerSet} раз",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                if (exercise.description.isNotBlank()) {
+                                    Text(
+                                        exercise.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -279,15 +315,81 @@ fun AddEditWorkoutScreen(
             }
         }
     }
+
+    if (showCreateDialog.value) {
+        CreateExerciseDialog(
+            onDismiss = { showCreateDialog.value = false },
+            onCreate = { nameOfExercise, description ->
+                onCreateExercise(nameOfExercise, description) { newId ->
+                    selectedExercises.value = selectedExercises.value +
+                        SelectedExerciseInput(
+                            exerciseId = newId,
+                            dailyTargetReps = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
+                            repsPerSet = DistributionHelper.DEFAULT_REPS_PER_SET.toString(),
+                        )
+                    showCreateDialog.value = false
+                    showExercisePicker.value = false
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CreateExerciseDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, String) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новое упражнение") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название") },
+                    placeholder = { Text("Например, Отжимания") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Описание (необязательно)") },
+                    placeholder = { Text("Например, грудь и трицепс") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = { onCreate(name.trim(), description.trim()) },
+            ) { Text("Создать и добавить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        },
+    )
 }
 
 @Composable
 private fun SelectedExerciseCard(
     exercise: ExerciseEntity,
     dailyTargetReps: String,
+    repsPerSet: String,
     onTargetChange: (String) -> Unit,
+    onRepsPerSetChange: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
+    val target = dailyTargetReps.toIntOrNull() ?: 0
+    val perSet = repsPerSet.toIntOrNull() ?: 0
+    val sets = DistributionHelper.setsForDay(target, perSet)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -301,22 +403,46 @@ private fun SelectedExerciseCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(exercise.name, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Подход по ${exercise.repsPerSet} раз",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (exercise.description.isNotBlank()) {
+                        Text(
+                            exercise.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Default.Close, contentDescription = "Убрать упражнение")
                 }
             }
-            NumberField(
-                label = "Сколько раз в день",
-                value = dailyTargetReps,
-                placeholder = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
-                onChange = onTargetChange,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                NumberField(
+                    label = "Сколько раз в день",
+                    value = dailyTargetReps,
+                    placeholder = DistributionHelper.DEFAULT_DAILY_TARGET_REPS.toString(),
+                    onChange = onTargetChange,
+                )
+                Text(
+                    "Например, 300. Приложение разобьёт на подходы автоматически.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                NumberField(
+                    label = "Повторений в подходе",
+                    value = repsPerSet,
+                    placeholder = DistributionHelper.DEFAULT_REPS_PER_SET.toString(),
+                    onChange = onRepsPerSetChange,
+                )
+                Text(
+                    if (sets.isNotEmpty()) {
+                        "Сегодня: $target раз → ${sets.size} подходов по $perSet"
+                    } else {
+                        "Укажите дневную норму и число повторений в подходе"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
         }
     }
 }

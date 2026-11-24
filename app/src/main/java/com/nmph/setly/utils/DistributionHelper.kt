@@ -48,7 +48,7 @@ object DistributionHelper {
     }
 
     fun setsForPlan(plan: PlannedExercise): List<Int> =
-        setsForDay(plan.dailyTargetReps, plan.exercise.repsPerSet)
+        setsForDay(plan.dailyTargetReps, plan.repsPerSet)
 
     /**
      * Отдых между подходами в минутах.

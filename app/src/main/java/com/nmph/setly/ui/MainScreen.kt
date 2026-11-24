@@ -35,6 +35,7 @@ import com.nmph.setly.ui.viewmodel.ExerciseViewModel
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import com.nmph.setly.ui.viewmodel.ProfileStats
 import com.nmph.setly.ui.viewmodel.TodayWorkoutItem
+import java.time.LocalDate
 
 /** Оболочка с нижней навигацией: каждая вкладка — полноценный маршрут. */
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -48,6 +49,7 @@ fun MainScreen(
     isSignedIn: Boolean,
     email: String?,
     lastSyncAt: Long?,
+    lastSyncError: String?,
     isSyncing: Boolean,
     darkTheme: Boolean,
     notificationsEnabled: Boolean,
@@ -55,6 +57,7 @@ fun MainScreen(
     onSnackbarShown: () -> Unit = {},
     onAddWorkout: () -> Unit,
     onEditExercise: (Int) -> Unit,
+    onOpenDay: (LocalDate) -> Unit,
     onOpenWorkout: (Int) -> Unit,
     onEditWorkout: (Int) -> Unit,
     onDeleteWorkout: (WorkoutPlan) -> Unit,
@@ -157,7 +160,7 @@ fun MainScreen(
                 enterTransition = { fadeIn(animationSpec = tween(180)) },
                 exitTransition = { fadeOut(animationSpec = tween(180)) },
             ) {
-                HistoryScreen(viewModel = historyViewModel)
+                HistoryScreen(viewModel = historyViewModel, onOpenDay = onOpenDay)
             }
             composable(
                 "profile",
@@ -169,6 +172,7 @@ fun MainScreen(
                     email = email,
                     stats = stats,
                     lastSyncAt = lastSyncAt,
+                    lastSyncError = lastSyncError,
                     isSyncing = isSyncing,
                     darkTheme = darkTheme,
                     notificationsEnabled = notificationsEnabled,

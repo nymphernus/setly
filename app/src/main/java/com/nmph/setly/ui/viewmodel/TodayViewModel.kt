@@ -28,6 +28,7 @@ import java.time.format.DateTimeFormatter
 data class TodayExerciseItem(
     val exercise: ExerciseEntity,
     val dailyTargetReps: Int,
+    val repsPerSet: Int,
     val sets: List<Int>,
     /** Индексы отмеченных подходов (не значения повторений!). */
     val completedIndexes: List<Int>,
@@ -85,6 +86,7 @@ class TodayViewModel(
                         TodayExerciseItem(
                             exercise = planned.exercise,
                             dailyTargetReps = planned.dailyTargetReps,
+                            repsPerSet = planned.repsPerSet,
                             sets = sets,
                             completedIndexes = saved.filter { it in sets.indices }.distinct(),
                         )

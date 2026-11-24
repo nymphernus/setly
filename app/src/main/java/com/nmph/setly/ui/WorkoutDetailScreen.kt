@@ -56,8 +56,9 @@ import com.nmph.setly.ui.components.RestTimer
 import com.nmph.setly.ui.components.SetPill
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
-import com.nmph.setly.ui.viewmodel.TodayExerciseItem
+import com.nmph.setly.ui.viewmodel.ExerciseTotal
 import com.nmph.setly.ui.viewmodel.TodayViewModel
+import com.nmph.setly.ui.viewmodel.WorkoutDetailViewModel
 import com.nmph.setly.utils.DistributionHelper
 import kotlinx.coroutines.delay
 
@@ -66,13 +67,16 @@ import kotlinx.coroutines.delay
 fun WorkoutDetailScreen(
     workout: WorkoutPlan?,
     todayViewModel: TodayViewModel,
+    detailViewModel: WorkoutDetailViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
+    val totals by detailViewModel.totals.collectAsStateWithLifecycle()
     val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
+    val todayExercises = todayItem?.exercises?.associateBy { it.exercise.id }.orEmpty()
 
     var timeLeft by rememberSaveable { mutableStateOf(0) }
     var timerRun by rememberSaveable { mutableStateOf(0) }
@@ -242,53 +246,48 @@ fun WorkoutDetailScreen(
                 }
             }
 
-            when {
-                workout.exercises.isEmpty() -> {
-                    item {
-                        EmptyStateView(
-                            icon = Icons.Default.FitnessCenter,
-                            title = "Добавьте упражнения в эту тренировку",
-                            description = "Без упражнений нечего распределять по дням и отмечать в подходах.",
-                            actionText = "Добавить упражнение",
-                            onAction = onEdit,
-                        )
-                    }
+            if (workout.exercises.isEmpty()) {
+                item {
+                    EmptyStateView(
+                        icon = Icons.Default.FitnessCenter,
+                        title = "Добавьте упражнения в эту тренировку",
+                        description = "Без упражнений нечего распределять по дням и отмечать в подходах.",
+                        actionText = "Добавить упражнение",
+                        onAction = onEdit,
+                    )
                 }
-
-                todayItem == null -> {
-                    item {
-                        Text(
-                            "Тренировка не активна сегодня — подходы появятся в её периоде.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                else -> {
-                    items(todayItem.exercises.size) { position ->
-                        val exercise = todayItem.exercises[position]
-                        ExerciseSetsCard(
-                            item = exercise,
-                            onSetClick = { index, wasChecked ->
-                                todayViewModel.toggleSet(exercise.exercise.id, index)
-                                when {
-                                    wasChecked -> {
-                                        timerRun = 0
-                                        timeLeft = 0
-                                    }
-                                    exercise.completedSetsCount + 1 >= exercise.sets.size -> {
-                                        timerRun = 0
-                                        timeLeft = 0
-                                    }
-                                    else -> {
-                                        timeLeft = totalSeconds
-                                        timerRun++
-                                    }
+            } else {
+                items(workout.exercises, key = { it.exercise.id }) { planned ->
+                    val todayExercise = todayExercises[planned.exercise.id]
+                    ExerciseSetsCard(
+                        name = planned.exercise.name,
+                        description = planned.exercise.description,
+                        dailyTargetReps = planned.dailyTargetReps,
+                        repsPerSet = planned.repsPerSet,
+                        sets = todayExercise?.sets
+                            ?: DistributionHelper.setsForDay(planned.dailyTargetReps, planned.repsPerSet),
+                        completedIndexes = todayExercise?.completedIndexes.orEmpty(),
+                        periodDays = workout.workout.periodDays,
+                        total = totals.byExercise[planned.exercise.id],
+                        onSetClick = { index, wasChecked ->
+                            todayViewModel.toggleSet(planned.exercise.id, index)
+                            when {
+                                wasChecked -> {
+                                    timerRun = 0
+                                    timeLeft = 0
                                 }
-                            },
-                        )
-                    }
+                                (todayExercise?.completedSetsCount ?: 0) + 1 >=
+                                    (todayExercise?.sets?.size ?: 0) -> {
+                                    timerRun = 0
+                                    timeLeft = 0
+                                }
+                                else -> {
+                                    timeLeft = totalSeconds
+                                    timerRun++
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -298,15 +297,33 @@ fun WorkoutDetailScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExerciseSetsCard(
-    item: TodayExerciseItem,
+    name: String,
+    description: String,
+    dailyTargetReps: Int,
+    repsPerSet: Int,
+    sets: List<Int>,
+    completedIndexes: List<Int>,
+    periodDays: Int,
+    total: ExerciseTotal?,
     onSetClick: (index: Int, wasChecked: Boolean) -> Unit,
 ) {
     val backgroundColor by animateColorAsState(
-        targetValue = if (item.isDone) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surface,
+        targetValue = if (sets.isNotEmpty() && completedIndexes.size == sets.size) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         animationSpec = tween(250),
         label = "detailExerciseBackground",
     )
+    val isDone = sets.isNotEmpty() && completedIndexes.size == sets.size
+    val completedReps = total?.completedReps ?: 0
+    val possibleReps = dailyTargetReps * periodDays
+    val percent = if (possibleReps > 0) {
+        ((completedReps * 100) / possibleReps).coerceIn(0, 100)
+    } else {
+        0
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -322,21 +339,45 @@ private fun ExerciseSetsCard(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
         ) {
             Text(
-                item.exercise.name,
+                name,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.tertiary,
             )
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
-                "Сегодня: ${item.dailyTargetReps} раз (${item.sets.size} подходов)",
+                "Сегодня: $dailyTargetReps раз → ${sets.size} подходов по $repsPerSet",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Отмечено подходов: ${item.completedSetsCount} из ${item.sets.size}",
+                "Всего за период: ${dailyTargetReps * periodDays} раз ($periodDays дней × $dailyTargetReps)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (item.sets.isEmpty()) {
+            Text(
+                "Выполнено за всё время: $completedReps раз ($percent%)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            Text(
+                "Отмечено подходов сегодня: ${completedIndexes.size} из ${sets.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (isDone) {
+                Text(
+                    "Норма на сегодня выполнена",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (sets.isEmpty()) {
                 Text(
                     "Нет подходов на сегодня",
                     style = MaterialTheme.typography.bodySmall,
@@ -347,8 +388,8 @@ private fun ExerciseSetsCard(
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
                 ) {
-                    item.sets.forEachIndexed { index, reps ->
-                        val isChecked = index in item.completedIndexes
+                    sets.forEachIndexed { index, reps ->
+                        val isChecked = index in completedIndexes
                         SetPill(
                             reps = reps,
                             checked = isChecked,

@@ -1,6 +1,5 @@
 package com.nmph.setly.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,14 +31,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.viewmodel.HistoryViewModel
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -47,11 +44,11 @@ import java.util.Locale
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
+    onOpenDay: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val month by viewModel.month.collectAsStateWithLifecycle()
     val progress by viewModel.dayProgress.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     val monthTitle = month.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("ru"))
@@ -155,14 +152,7 @@ fun HistoryScreen(
                                 else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
                                 shape = RoundedCornerShape(12.dp),
                             )
-                            .clickable {
-                                val text = if (ratio == null) {
-                                    "${date.format(DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru")))}: нет данных"
-                                } else {
-                                    "${date.format(DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru")))}: ${(ratio * 100).toInt()}%"
-                                }
-                                Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-                            },
+                            .clickable { onOpenDay(date) },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

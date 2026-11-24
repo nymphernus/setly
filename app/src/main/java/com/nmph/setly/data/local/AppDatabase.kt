@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkoutExerciseCrossRef::class,
         ProgressEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -219,6 +219,56 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v9: размер подхода переезжает из упражнения в тренировку, у упражнения появляется
+        // описание. Старый repsPerSet переносится в каждую связь, чтобы дневные планы не менялись.
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `workout_exercise_cross_ref_new` (
+                        `workoutId` INTEGER NOT NULL,
+                        `exerciseId` INTEGER NOT NULL,
+                        `dailyTargetReps` INTEGER NOT NULL,
+                        `repsPerSet` INTEGER NOT NULL,
+                        PRIMARY KEY(`workoutId`, `exerciseId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `workout_exercise_cross_ref_new`
+                        (`workoutId`, `exerciseId`, `dailyTargetReps`, `repsPerSet`)
+                    SELECT cr.`workoutId`, cr.`exerciseId`, cr.`dailyTargetReps`,
+                           CASE WHEN e.`repsPerSet` > 0 THEN e.`repsPerSet` ELSE 20 END
+                    FROM `workout_exercise_cross_ref` cr
+                    INNER JOIN `exercises` e ON e.`id` = cr.`exerciseId`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `workout_exercise_cross_ref`")
+                db.execSQL(
+                    "ALTER TABLE `workout_exercise_cross_ref_new` RENAME TO `workout_exercise_cross_ref`",
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE `exercises_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `description` TEXT NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `exercises_new` (`id`, `name`, `description`)
+                    SELECT `id`, `name`, '' FROM `exercises`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `exercises`")
+                db.execSQL("ALTER TABLE `exercises_new` RENAME TO `exercises`")
+            }
+        }
+
         // Синглтон на applicationContext: БД живёт дольше Activity и не утекает при повороте экрана.
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -229,7 +279,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                        MIGRATION_6_7, MIGRATION_7_8,
+                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
                     )
                     .build().also { INSTANCE = it }
             }

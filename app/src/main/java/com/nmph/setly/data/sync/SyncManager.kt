@@ -3,6 +3,7 @@ package com.nmph.setly.data.sync
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
 import com.nmph.setly.data.local.AppDatabase
 import com.nmph.setly.data.local.ExerciseEntity
@@ -11,15 +12,23 @@ import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseCrossRef
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.data.local.withPlans
+import com.nmph.setly.utils.DistributionHelper
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+import java.io.IOException
 import java.time.LocalDate
 
 /**
  * Offline-first синхронизация: Room остаётся источником данных, Firestore — бэкап.
  * Пути: users/{uid}/workouts/{workoutId}/exercises/{exerciseId} и users/{uid}/progress/{date_exerciseId}.
+ *
+ * Любая операция с облаком ограничена 10 секундами: сетевой вызов больше не может
+ * оставить интерфейс в состоянии «синхронизируемся» навсегда.
  */
 class SyncManager(
     context: Context,
@@ -37,6 +46,9 @@ class SyncManager(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing
 
+    private val _lastSyncError = MutableStateFlow<String?>(null)
+    val lastSyncError: StateFlow<String?> = _lastSyncError
+
     val isSignedIn: Boolean get() = auth.currentUser != null
 
     suspend fun pushWorkoutToCloud(plan: WorkoutPlan) {
@@ -46,27 +58,32 @@ class SyncManager(
             .collection("workouts")
             .document(workout.id.toString())
 
-        workoutRef.set(
-            mapOf(
-                "name" to workout.name,
-                "startDate" to workout.startDate,
-                "periodDays" to workout.periodDays,
-                "sleepStart" to workout.sleepStart,
-                "sleepEnd" to workout.sleepEnd,
-            ),
-            SetOptions.merge(),
-        ).await()
+        firestoreCall {
+            workoutRef.set(
+                mapOf(
+                    "name" to workout.name,
+                    "startDate" to workout.startDate,
+                    "periodDays" to workout.periodDays,
+                    "sleepStart" to workout.sleepStart,
+                    "sleepEnd" to workout.sleepEnd,
+                ),
+                SetOptions.merge(),
+            ).await()
+        }
 
         plan.exercises.forEach { planned ->
-            workoutRef.collection("exercises").document(planned.exercise.id.toString())
-                .set(
-                    mapOf(
-                        "name" to planned.exercise.name,
-                        "repsPerSet" to planned.exercise.repsPerSet,
-                        "dailyTargetReps" to planned.dailyTargetReps,
-                    ),
-                    SetOptions.merge(),
-                ).await()
+            firestoreCall {
+                workoutRef.collection("exercises").document(planned.exercise.id.toString())
+                    .set(
+                        mapOf(
+                            "name" to planned.exercise.name,
+                            "description" to planned.exercise.description,
+                            "repsPerSet" to planned.repsPerSet,
+                            "dailyTargetReps" to planned.dailyTargetReps,
+                        ),
+                        SetOptions.merge(),
+                    ).await()
+            }
         }
         markSynced()
     }
@@ -74,7 +91,9 @@ class SyncManager(
     // Облако перезаписывает локальные записи с тем же ID (упрощённая стратегия конфликтов).
     suspend fun pullFromCloud() {
         val uid = currentUid() ?: return
-        val snapshots = users().document(uid).collection("workouts").get().await()
+        val snapshots = firestoreCall {
+            users().document(uid).collection("workouts").get().await()
+        }
 
         for (doc in snapshots.documents) {
             val workoutId = doc.id.toIntOrNull() ?: continue
@@ -82,17 +101,21 @@ class SyncManager(
             val name = data["name"] as? String ?: continue
             val startDate = (data["startDate"] as? Number)?.toLong() ?: continue
 
-            val exerciseSnapshots = doc.reference.collection("exercises").get().await()
+            val exerciseSnapshots = firestoreCall {
+                doc.reference.collection("exercises").get().await()
+            }
             val planned = exerciseSnapshots.documents.mapNotNull { exDoc ->
                 val exId = exDoc.id.toIntOrNull() ?: return@mapNotNull null
                 val exData = exDoc.data ?: return@mapNotNull null
                 val exercise = ExerciseEntity(
                     id = exId,
                     name = exData["name"] as? String ?: return@mapNotNull null,
-                    repsPerSet = (exData["repsPerSet"] as? Number)?.toInt() ?: 20,
+                    description = exData["description"] as? String ?: "",
                 )
                 val dailyTargetReps = (exData["dailyTargetReps"] as? Number)?.toInt() ?: 0
-                exercise to dailyTargetReps
+                val repsPerSet = (exData["repsPerSet"] as? Number)?.toInt()
+                    ?: DistributionHelper.DEFAULT_REPS_PER_SET
+                Triple(exercise, dailyTargetReps, repsPerSet)
             }
 
             database.exerciseDao().let { dao ->
@@ -111,8 +134,13 @@ class SyncManager(
                 )
                 clearExercises(workoutId)
                 if (planned.isNotEmpty()) {
-                    insertCrossRefs(planned.map { (exercise, dailyTargetReps) ->
-                        WorkoutExerciseCrossRef(workoutId, exercise.id, dailyTargetReps)
+                    insertCrossRefs(planned.map { (exercise, dailyTargetReps, repsPerSet) ->
+                        WorkoutExerciseCrossRef(
+                            workoutId,
+                            exercise.id,
+                            dailyTargetReps,
+                            repsPerSet,
+                        )
                     })
                 }
             }
@@ -124,30 +152,34 @@ class SyncManager(
     suspend fun pushProgressToCloud(progress: ProgressEntity) {
         val uid = currentUid() ?: return
         val ref = progressRef(uid, progress.id)
-        val remote = ref.get().await()
+        val remote = firestoreCall { ref.get().await() }
         val remoteSets = (remote.data?.get("completedSets") as? List<*>)?.size ?: 0
         // Не понижаем облако: при конфликте побеждает большее число выполненных подходов.
         if (remote.exists() && remoteSets > progress.completedSets.size) return
 
-        ref.set(
-            mapOf(
-                "date" to progress.date,
-                "exerciseId" to progress.exerciseId,
-                "completedSets" to progress.completedSets,
-                "isCompleted" to progress.isCompleted,
-            ),
-            SetOptions.merge(),
-        ).await()
+        firestoreCall {
+            ref.set(
+                mapOf(
+                    "date" to progress.date,
+                    "exerciseId" to progress.exerciseId,
+                    "completedSets" to progress.completedSets,
+                    "isCompleted" to progress.isCompleted,
+                ),
+                SetOptions.merge(),
+            ).await()
+        }
         markSynced()
     }
 
     suspend fun pullProgressFromCloud(startDate: String, endDate: String) {
         val uid = currentUid() ?: return
-        val snapshot = progressCollection(uid)
-            .whereGreaterThanOrEqualTo("date", startDate)
-            .whereLessThanOrEqualTo("date", endDate)
-            .get()
-            .await()
+        val snapshot = firestoreCall {
+            progressCollection(uid)
+                .whereGreaterThanOrEqualTo("date", startDate)
+                .whereLessThanOrEqualTo("date", endDate)
+                .get()
+                .await()
+        }
 
         for (doc in snapshot.documents) {
             val data = doc.data ?: continue
@@ -184,23 +216,66 @@ class SyncManager(
     suspend fun deleteWorkoutFromCloud(workoutId: Int) {
         val uid = currentUid() ?: return
         val workoutRef = users().document(uid).collection("workouts").document(workoutId.toString())
-        val exercises = workoutRef.collection("exercises").get().await()
-        firestore.batch().apply {
-            exercises.documents.forEach { delete(it.reference) }
-            delete(workoutRef)
-        }.commit().await()
+        val exercises = firestoreCall { workoutRef.collection("exercises").get().await() }
+        firestoreCall {
+            firestore.batch().apply {
+                exercises.documents.forEach { delete(it.reference) }
+                delete(workoutRef)
+            }.commit().await()
+        }
         markSynced()
     }
 
-    suspend fun syncNow() {
+    /** Возвращает true, если все шаги завершились без ошибок. */
+    suspend fun syncNow(): Boolean {
         _isSyncing.value = true
-        try {
-            pullFromCloud()
-            pullProgressForCurrentMonth()
-            pushAllToCloud()
+        _lastSyncError.value = null
+        return try {
+            withTimeout(SYNC_TIMEOUT_MS) {
+                pullFromCloud()
+                pullProgressForCurrentMonth()
+                pushAllToCloud()
+            }
+            _lastSyncError.value == null
+        } catch (e: TimeoutCancellationException) {
+            _lastSyncError.value = "Синхронизация не успела за 10 секунд"
+            false
+        } catch (e: CancellationException) {
+            false
+        } catch (e: Exception) {
+            if (_lastSyncError.value == null) _lastSyncError.value = describeError(e)
+            false
         } finally {
             _isSyncing.value = false
         }
+    }
+
+    /** Очищает сообщение об ошибке, чтобы старый текст не висел после успешного входа. */
+    fun clearError() {
+        _lastSyncError.value = null
+    }
+
+    /** Одна Firestore-операция с жёстким лимитом времени и записью ошибки в состояние. */
+    private suspend fun <T> firestoreCall(block: suspend () -> T): T = try {
+        withTimeout(SYNC_TIMEOUT_MS) { block() }
+    } catch (e: TimeoutCancellationException) {
+        _lastSyncError.value = "Ошибка сети: ответ не получен за 10 секунд"
+        throw e
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        _lastSyncError.value = describeError(e)
+        throw e
+    }
+
+    private fun describeError(error: Exception): String = when (error) {
+        is FirebaseFirestoreException -> when (error.code) {
+            FirebaseFirestoreException.Code.PERMISSION_DENIED -> "Нет прав доступа к облаку"
+            FirebaseFirestoreException.Code.UNAVAILABLE -> "Ошибка сети: облако недоступно"
+            else -> "Ошибка Firestore: ${error.code.name}"
+        }
+        is IOException -> "Ошибка сети: проверьте подключение"
+        else -> error.message?.takeIf { it.isNotBlank() } ?: "Ошибка синхронизации"
     }
 
     private fun users() = firestore.collection("users")
@@ -232,6 +307,7 @@ class SyncManager(
     }
 
     private companion object {
+        const val SYNC_TIMEOUT_MS = 10_000L
         const val PREFS_NAME = "setly_sync"
         const val KEY_LAST_SYNC = "last_sync_at"
     }
