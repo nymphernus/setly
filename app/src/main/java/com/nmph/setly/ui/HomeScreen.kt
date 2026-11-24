@@ -214,7 +214,11 @@ private fun WorkoutCard(
                     DistributionHelper.setsForPlan(it, item.workout).size
                 }
             Text(
-                "Отдых: ${DistributionHelper.restMinutes(item.workout.sleepStart, item.workout.sleepEnd, totalSets)} мин",
+                "Окна подходов: " + DistributionHelper.calculateWindowsForExercise(
+                    item.workout.sleepStart,
+                    item.workout.sleepEnd,
+                    totalSets,
+                ).size,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

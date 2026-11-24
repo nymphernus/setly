@@ -49,17 +49,37 @@ class DistributionHelperTest {
     }
 
     @Test
-    fun `rest uses awake time and is capped at 120 minutes`() {
-        // 22:00-08:00 = 10 ч сна → 14 ч бодрствования → 840 / 10 = 84 мин.
+    fun `windows split awake time into equal per-exercise slots`() {
+        // 22:00-08:00 = 10 ч сна → 14 ч бодрствования → 840 / 10 = 84 мин на окно.
+        val windows = DistributionHelper.calculateWindowsForExercise("22:00", "08:00", 10)
         assertEquals(840, DistributionHelper.awakeMinutes("22:00", "08:00"))
-        assertEquals(84, DistributionHelper.restMinutes("22:00", "08:00", 10))
-        assertEquals(120, DistributionHelper.restMinutes("22:00", "08:00", 1))
-        assertEquals(120, DistributionHelper.restMinutes("23:59", "00:00", 10))
+        assertEquals(10, windows.size)
+        assertEquals(480, windows.first().startMinute) // 08:00
+        assertEquals("08:00-09:24", windows.first().label.replace('–', '-'))
+        assertEquals(84, windows.first().durationMinutes)
+        assertEquals("20:36", windows.last().startLabel)
+        assertEquals(1320, windows.last().endMinute) // 22:00
+        assertEquals(840, windows.sumOf { it.durationMinutes })
     }
 
     @Test
-    fun `rest is never less than one minute`() {
-        assertEquals(1, DistributionHelper.restMinutes("22:00", "08:00", 1_000))
+    fun `window crosses midnight when awake period wraps around`() {
+        val windows = DistributionHelper.calculateWindowsForExercise("01:00", "09:00", 10)
+        assertEquals(10, windows.size)
+        assertEquals(540, windows.first().startMinute) // 09:00
+        assertEquals(96, windows.first().durationMinutes)
+        assertEquals(60, windows.last().endMinute) // 01:00 следующего дня
+        assertEquals(true, windows.last().wrapsMidnight)
+        assertEquals(960, windows.sumOf { it.durationMinutes })
+    }
+
+    @Test
+    fun `window remainder is spread without losing minutes`() {
+        val windows = DistributionHelper.calculateWindowsForExercise("22:00", "08:00", 11)
+        assertEquals(11, windows.size)
+        assertEquals(4, windows.count { it.durationMinutes == 77 })
+        assertEquals(7, windows.count { it.durationMinutes == 76 })
+        assertEquals(840, windows.sumOf { it.durationMinutes })
     }
 
     @Test

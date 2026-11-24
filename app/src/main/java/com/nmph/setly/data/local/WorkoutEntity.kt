@@ -3,7 +3,7 @@ package com.nmph.setly.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/** Тренировка: период, окно сна и настройки напоминаний. Отдых считается от бодрствования. */
+/** Тренировка: период, окно сна и настройки напоминаний. Временные окна считаются от бодрствования. */
 @Entity(tableName = "workouts")
 data class WorkoutEntity(
     @PrimaryKey(autoGenerate = true)

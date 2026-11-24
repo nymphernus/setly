@@ -143,30 +143,25 @@ object AchievementChecker {
         if (context.hour in 0..4) unlock(context, "night_warrior")
 
         data.workouts.forEach { plan ->
-            val plannedSets = plan.exercises.sumOf { setsFor(it, plan.workout).size }
-            if (plannedSets > 0) {
-                val exactTiming = plan.exercises.any { planned ->
-                    val rest = DistributionHelper.restTimeMinutes(
-                        plan.workout,
-                        planned.dailyTargetReps,
-                        planned.repsPerSet,
-                    )
-                    val perSet = DistributionHelper.estimatedTimePerSet(
-                        planned.repsPerSet,
-                        planned.exercise.unit,
-                    )
-                    rest == perSet
+            val windowsByExercise = plan.exercises.map { planned ->
+                DistributionHelper.calculateWindowsForExercise(
+                    plan.workout.sleepStart,
+                    plan.workout.sleepEnd,
+                    setsFor(planned, plan.workout).size,
+                )
+            }
+            // Равные окна для одного упражнения — признак точного распределения времени.
+            val evenlySpread = windowsByExercise.any { windows ->
+                windows.isNotEmpty() && windows.all {
+                    it.durationMinutes == windows.first().durationMinutes
                 }
-                if (exactTiming) unlock(context, "perfect_timing")
             }
-            val longRest = plan.exercises.any {
-                DistributionHelper.restTimeMinutes(
-                    plan.workout,
-                    it.dailyTargetReps,
-                    it.repsPerSet,
-                ) > 5
+            if (evenlySpread) unlock(context, "perfect_timing")
+
+            val longWindow = windowsByExercise.any { windows ->
+                windows.any { it.durationMinutes > 5 }
             }
-            if (longRest) unlock(context, "patient")
+            if (longWindow) unlock(context, "patient")
         }
     }
 

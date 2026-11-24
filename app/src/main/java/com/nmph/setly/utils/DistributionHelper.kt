@@ -9,22 +9,39 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.ceil
 
+/** Окно одного подхода в минутах от полуночи. Конец меньше начала — окно пересекает полночь. */
+data class TimeWindow(
+    val startMinute: Int,
+    val endMinute: Int,
+) {
+    val wrapsMidnight: Boolean get() = endMinute < startMinute
+
+    val durationMinutes: Int get() = if (wrapsMidnight) {
+        DistributionHelper.MINUTES_PER_DAY - startMinute + endMinute
+    } else {
+        endMinute - startMinute
+    }
+
+    val startLabel: String get() = DistributionHelper.formatMinute(startMinute)
+    val endLabel: String get() = DistributionHelper.formatMinute(endMinute)
+    val label: String get() = "$startLabel–$endLabel"
+}
+
 /**
- * Единый источник истины для расчёта подходов, отдыха и долгов.
+ * Единый источник истины для расчёта подходов, временных окон и долгов.
  *
- * 1. Подходów за день: ceil(dailyTargetReps / repsPerSet).
- * 2. Отдых считается только от времени бодрствования: (24ч - сон) / число подходов, 1..120 минут.
+ * 1. Подходы за день: ceil(dailyTargetReps / repsPerSet).
+ * 2. Время бодрствования делится на окна подходов, по одному окну на каждый подход упражнения.
  * 3. Недоделанная норма за прошлый день становится долгом и распределяется на 7 дней вперёд.
  */
 object DistributionHelper {
     const val DEFAULT_DAILY_TARGET_REPS = 300
     const val DEFAULT_REPS_PER_SET = 20
-    const val MAX_REST_MINUTES = 120
     const val DEBT_WINDOW_DAYS = 7
-    private const val MINUTES_PER_DAY = 24 * 60
-    private const val SECONDS_PER_REP = 3
+    const val MINUTES_PER_DAY = 24 * 60
 
-    private fun parseMinutes(value: String): Int {
+    /** Время «HH:mm» в минутах от полуночи (0..1439). */
+    fun minutesOfDay(value: String): Int {
         val parts = value.split(":")
         if (parts.size != 2) return 0
         val hours = parts[0].toIntOrNull()?.coerceIn(0, 23) ?: 0
@@ -32,10 +49,17 @@ object DistributionHelper {
         return hours * 60 + minutes
     }
 
+    /** Формат «HH:mm» для минут от полуночи (1440 отображается как 24:00). */
+    fun formatMinute(minute: Int): String {
+        if (minute == MINUTES_PER_DAY) return "24:00"
+        val normalized = ((minute % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+        return "%02d:%02d".format(normalized / 60, normalized % 60)
+    }
+
     /** Длительность сна в минутах. Для 22:00–08:00 это 600 минут (10 часов). */
     fun sleepMinutes(sleepStart: String, sleepEnd: String): Int {
-        val start = parseMinutes(sleepStart)
-        val end = parseMinutes(sleepEnd)
+        val start = minutesOfDay(sleepStart)
+        val end = minutesOfDay(sleepEnd)
         val diff = end - start
         return (if (diff <= 0) diff + MINUTES_PER_DAY else diff)
             .coerceIn(0, MINUTES_PER_DAY)
@@ -66,33 +90,39 @@ object DistributionHelper {
         }.map { it.coerceAtLeast(1) }
     }
 
-    /** Отдых между подходами: всё время бодрствования делится на число подходов. */
-    fun restMinutes(sleepStart: String, sleepEnd: String, totalSetsPerDay: Int): Int {
-        if (totalSetsPerDay <= 0) return MAX_REST_MINUTES
-        return (awakeMinutes(sleepStart, sleepEnd) / totalSetsPerDay)
-            .coerceIn(1, MAX_REST_MINUTES)
-    }
+    /**
+     * Временные окна для одного упражнения: всё время бодрствования делится на [totalSets]
+     * равных окон, начиная с момента пробуждения [sleepEnd]. Остаток делится поровну
+     * между первыми окнами, чтобы покрыть бодрствование без потери минут.
+     *
+     * Для сна 22:00–08:00 и 10 подходов окна идут с 08:00 до 22:00 по 84 минуты.
+     * Если бодрствование переходит через полночь, у соответствующего окна
+     * [TimeWindow.endMinute] меньше [TimeWindow.startMinute].
+     */
+    fun calculateWindowsForExercise(
+        sleepStart: String,
+        sleepEnd: String,
+        totalSets: Int,
+    ): List<TimeWindow> {
+        if (totalSets <= 0) return emptyList()
+        val awake = awakeMinutes(sleepStart, sleepEnd)
+        val baseLength = awake / totalSets
+        val remainder = awake % totalSets
+        val wakeMinute = minutesOfDay(sleepEnd)
 
-    /** Отдых для конкретного упражнения тренировки. */
-    fun restTimeMinutes(
-        workout: WorkoutEntity,
-        dailyTargetReps: Int,
-        repsPerSet: Int,
-    ): Int = restMinutes(
-        workout.sleepStart,
-        workout.sleepEnd,
-        totalSetsPerDay(dailyTargetReps, repsPerSet),
-    )
-
-    /** Оценка длительности одного подхода в минутах (минимум минута). */
-    fun estimatedTimePerSet(repsPerSet: Int, unit: String): Int {
-        val safeReps = if (repsPerSet > 0) repsPerSet else DEFAULT_REPS_PER_SET
-        val minutes = when (unit) {
-            "Минуты" -> safeReps
-            "Секунды" -> ceil(safeReps / 60.0).toInt()
-            else -> ceil(safeReps * SECONDS_PER_REP / 60.0).toInt()
+        var offset = 0
+        return (0 until totalSets).map { index ->
+            val length = baseLength + if (index < remainder) 1 else 0
+            val start = (wakeMinute + offset) % MINUTES_PER_DAY
+            val rawEnd = wakeMinute + offset + length
+            offset += length
+            val end = if (rawEnd == MINUTES_PER_DAY) {
+                MINUTES_PER_DAY
+            } else {
+                rawEnd % MINUTES_PER_DAY
+            }
+            TimeWindow(start, end)
         }
-        return minutes.coerceAtLeast(1)
     }
 
     /**

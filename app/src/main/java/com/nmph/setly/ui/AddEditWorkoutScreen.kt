@@ -56,6 +56,7 @@ import com.nmph.setly.data.local.WorkoutExerciseSettings
 import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.utils.DistributionHelper
+import com.nmph.setly.utils.TimeWindow
 
 private data class SelectedExerciseInput(
     val exerciseId: Int,
@@ -463,7 +464,7 @@ private fun SelectedExerciseAccordion(
 
     // Подсказка пересчитывается при каждом изменении нормы, размера подхода и сна.
     var sets by remember { mutableStateOf(emptyList<Int>()) }
-    var restMinutes by remember { mutableStateOf(0) }
+    var windows by remember { mutableStateOf(emptyList<TimeWindow>()) }
     LaunchedEffect(dailyTargetReps, repsPerSet, sleepStart, sleepEnd) {
         sets = if (target > 0 && perSet > 0) {
             DistributionHelper.setsForAdjustedTarget(
@@ -473,7 +474,7 @@ private fun SelectedExerciseAccordion(
         } else {
             emptyList()
         }
-        restMinutes = DistributionHelper.restMinutes(sleepStart, sleepEnd, sets.size)
+        windows = DistributionHelper.calculateWindowsForExercise(sleepStart, sleepEnd, sets.size)
     }
 
     Card(
@@ -521,7 +522,8 @@ private fun SelectedExerciseAccordion(
                     Text(
                         if (sets.isNotEmpty()) {
                             "На сегодня: $target раз → ${sets.size} подходов по " +
-                                "${sets.first()} раз · отдых $restMinutes мин"
+                                "${sets.first()} раз · окон: ${windows.size} по " +
+                                "${windows.firstOrNull()?.durationMinutes ?: 0} мин"
                         } else {
                             "Укажите дневную норму и число повторений в подходе"
                         },
