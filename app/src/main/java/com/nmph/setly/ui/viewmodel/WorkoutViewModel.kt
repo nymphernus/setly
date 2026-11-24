@@ -48,7 +48,6 @@ class WorkoutViewModel(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        availableTimeMinutes: Int,
         notificationsEnabled: Boolean,
         remindBeforeMinutes: Int,
         settings: List<WorkoutExerciseSettings>,
@@ -61,8 +60,8 @@ class WorkoutViewModel(
             val changedFields = mutableSetOf<String>()
             if (existing != null) {
                 if (existing.name != name) changedFields += "name"
-                if (existing.availableTimeMinutes != availableTimeMinutes) {
-                    changedFields += "availableTime"
+                if (existing.sleepStart != sleepStart || existing.sleepEnd != sleepEnd) {
+                    changedFields += "sleep"
                 }
                 val oldReps = existingPlan.exercises
                     .associate { it.exercise.id to it.repsPerSet }
@@ -77,7 +76,6 @@ class WorkoutViewModel(
                 periodDays = periodDays,
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,
-                availableTimeMinutes = availableTimeMinutes.coerceAtLeast(1),
                 notificationsEnabled = notificationsEnabled,
                 remindBeforeMinutes = remindBeforeMinutes.coerceAtLeast(1),
             )

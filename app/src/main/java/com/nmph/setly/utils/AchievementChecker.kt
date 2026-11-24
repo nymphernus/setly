@@ -33,7 +33,7 @@ data class AchievementContext(
     val workoutDao: WorkoutDao,
     val exerciseDao: ExerciseDao,
     val progressDao: ProgressDao,
-    /** Какие поля тренировки изменились: name / reps / availableTime. */
+    /** Какие поля тренировки изменились: name / reps / sleep. */
     val changedFields: Set<String> = emptySet(),
     val hour: Int = LocalDateTime.now().hour,
 )
@@ -156,8 +156,7 @@ object AchievementChecker {
         data.workouts.forEach { plan ->
             val plannedSets = plan.exercises.sumOf { setsFor(it, plan.workout).size }
             if (plannedSets > 0) {
-                val estimatedMinutes = plan.exercises.sumOf { planned ->
-                    val sets = setsFor(planned, plan.workout)
+                val exactTiming = plan.exercises.any { planned ->
                     val rest = DistributionHelper.restTimeMinutes(
                         plan.workout,
                         planned.dailyTargetReps,
@@ -167,11 +166,9 @@ object AchievementChecker {
                         planned.repsPerSet,
                         planned.exercise.unit,
                     )
-                    sets.size * (rest + perSet)
+                    rest == perSet
                 }
-                if (estimatedMinutes == plan.workout.availableTimeMinutes) {
-                    unlock(context, "perfect_timing")
-                }
+                if (exactTiming) unlock(context, "perfect_timing")
             }
             val longRest = plan.exercises.any {
                 DistributionHelper.restTimeMinutes(
@@ -205,7 +202,7 @@ object AchievementChecker {
         if (data.exercises.size >= 10) unlock(context, "expert")
 
         if ("reps" in context.changedFields) unlock(context, "dynamic")
-        if ("availableTime" in context.changedFields) unlock(context, "adapt")
+        if ("sleep" in context.changedFields) unlock(context, "adapt")
         if ("name" in context.changedFields) unlock(context, "editor")
     }
 

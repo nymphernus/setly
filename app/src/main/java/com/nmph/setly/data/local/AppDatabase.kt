@@ -17,7 +17,7 @@ import com.nmph.setly.data.AchievementRepository
         ProgressEntity::class,
         AchievementEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -331,6 +331,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v12: удаляем «время на тренировку». Отдых теперь всегда считается от времени
+        // бодрствования, поэтому колонка больше не нужна; остальные данные сохраняются.
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `workouts_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `startDate` INTEGER NOT NULL,
+                        `periodDays` INTEGER NOT NULL,
+                        `sleepStart` TEXT NOT NULL,
+                        `sleepEnd` TEXT NOT NULL,
+                        `notificationsEnabled` INTEGER NOT NULL,
+                        `remindBeforeMinutes` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `workouts_new`
+                        (`id`, `name`, `startDate`, `periodDays`, `sleepStart`, `sleepEnd`,
+                         `notificationsEnabled`, `remindBeforeMinutes`)
+                    SELECT `id`, `name`, `startDate`, `periodDays`, `sleepStart`, `sleepEnd`,
+                           `notificationsEnabled`, `remindBeforeMinutes` FROM `workouts`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `workouts`")
+                db.execSQL("ALTER TABLE `workouts_new` RENAME TO `workouts`")
+            }
+        }
+
         private val ACHIEVEMENT_SEED_CALLBACK = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
@@ -368,7 +400,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-                        MIGRATION_10_11,
+                        MIGRATION_10_11, MIGRATION_11_12,
                     )
                     .addCallback(ACHIEVEMENT_SEED_CALLBACK)
                     .build().also { INSTANCE = it }

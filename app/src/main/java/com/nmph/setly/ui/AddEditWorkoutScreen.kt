@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,8 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nmph.setly.data.local.ExerciseEntity
-import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutExerciseSettings
+import com.nmph.setly.data.local.WorkoutEntity
 import com.nmph.setly.data.local.WorkoutPlan
 import com.nmph.setly.utils.DistributionHelper
 
@@ -84,7 +86,6 @@ fun AddEditWorkoutScreen(
         periodDays: Int,
         sleepStart: String,
         sleepEnd: String,
-        availableTimeMinutes: Int,
         notificationsEnabled: Boolean,
         remindBeforeMinutes: Int,
         settings: List<WorkoutExerciseSettings>,
@@ -108,12 +109,6 @@ fun AddEditWorkoutScreen(
     }
     val sleepEnd = rememberSaveable {
         mutableStateOf(workout?.workout?.sleepEnd ?: "08:00")
-    }
-    val availableTime = rememberSaveable {
-        mutableStateOf(
-            workout?.workout?.availableTimeMinutes?.toString()
-                ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES.toString(),
-        )
     }
     val notificationsEnabled = rememberSaveable {
         mutableStateOf(workout?.workout?.notificationsEnabled ?: true)
@@ -143,8 +138,6 @@ fun AddEditWorkoutScreen(
         period.value = workout?.workout?.periodDays?.toString() ?: "30"
         sleepStart.value = workout?.workout?.sleepStart ?: "22:00"
         sleepEnd.value = workout?.workout?.sleepEnd ?: "08:00"
-        availableTime.value = workout?.workout?.availableTimeMinutes?.toString()
-            ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES.toString()
         notificationsEnabled.value = workout?.workout?.notificationsEnabled ?: true
         remindBefore.value = workout?.workout?.remindBeforeMinutes?.toString()
             ?: WorkoutEntity.DEFAULT_REMIND_BEFORE_MINUTES.toString()
@@ -209,12 +202,6 @@ fun AddEditWorkoutScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
-            NumberField(
-                label = "Время на тренировку, минут",
-                value = availableTime.value,
-                onChange = { availableTime.value = it },
-            )
-
             Text(
                 "Уведомления",
                 style = MaterialTheme.typography.titleMedium,
@@ -257,7 +244,6 @@ fun AddEditWorkoutScreen(
                     exercise = exercise,
                     dailyTargetReps = input.dailyTargetReps,
                     repsPerSet = input.repsPerSet,
-                    availableTimeMinutes = availableTime.value.toIntOrNull() ?: 0,
                     sleepStart = sleepStart.value,
                     sleepEnd = sleepEnd.value,
                     expanded = isExpanded,
@@ -304,7 +290,6 @@ fun AddEditWorkoutScreen(
                 (period.value.toIntOrNull() ?: 0) > 0 &&
                 isValidTime(sleepStart.value) &&
                 isValidTime(sleepEnd.value) &&
-                (availableTime.value.toIntOrNull() ?: 0) > 0 &&
                 (remindBefore.value.toIntOrNull() ?: 0) > 0 &&
                 settingsValid
 
@@ -324,7 +309,6 @@ fun AddEditWorkoutScreen(
                             period.value.toInt(),
                             sleepStart.value,
                             sleepEnd.value,
-                            availableTime.value.toInt(),
                             notificationsEnabled.value,
                             remindBefore.value.toInt(),
                             selectedExercises.value.map {
@@ -466,7 +450,6 @@ private fun SelectedExerciseAccordion(
     exercise: ExerciseEntity,
     dailyTargetReps: String,
     repsPerSet: String,
-    availableTimeMinutes: Int,
     sleepStart: String,
     sleepEnd: String,
     expanded: Boolean,
@@ -477,21 +460,20 @@ private fun SelectedExerciseAccordion(
 ) {
     val target = dailyTargetReps.toIntOrNull() ?: 0
     val perSet = repsPerSet.toIntOrNull() ?: 0
-    val planWorkout = WorkoutEntity(
-        name = "",
-        startDate = 0L,
-        periodDays = 0,
-        availableTimeMinutes = availableTimeMinutes,
-        sleepStart = sleepStart,
-        sleepEnd = sleepEnd,
-    )
-    val sets = if (target > 0 && perSet > 0) {
-        DistributionHelper.setsForPlan(
-            PlannedExercisePreview(exercise, target, perSet).toPlan(),
-            planWorkout,
-        )
-    } else {
-        emptyList()
+
+    // Подсказка пересчитывается при каждом изменении нормы, размера подхода и сна.
+    var sets by remember { mutableStateOf(emptyList<Int>()) }
+    var restMinutes by remember { mutableStateOf(0) }
+    LaunchedEffect(dailyTargetReps, repsPerSet, sleepStart, sleepEnd) {
+        sets = if (target > 0 && perSet > 0) {
+            DistributionHelper.setsForAdjustedTarget(
+                PlannedExercisePreview(exercise, target, perSet).toPlan(),
+                target,
+            )
+        } else {
+            emptyList()
+        }
+        restMinutes = DistributionHelper.restMinutes(sleepStart, sleepEnd, sets.size)
     }
 
     Card(
@@ -539,7 +521,7 @@ private fun SelectedExerciseAccordion(
                     Text(
                         if (sets.isNotEmpty()) {
                             "На сегодня: $target раз → ${sets.size} подходов по " +
-                                "${sets.first()} раз (с учетом времени)"
+                                "${sets.first()} раз · отдых $restMinutes мин"
                         } else {
                             "Укажите дневную норму и число повторений в подходе"
                         },

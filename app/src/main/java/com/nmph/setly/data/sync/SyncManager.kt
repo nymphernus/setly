@@ -66,7 +66,6 @@ class SyncManager(
                     "periodDays" to workout.periodDays,
                     "sleepStart" to workout.sleepStart,
                     "sleepEnd" to workout.sleepEnd,
-                    "availableTimeMinutes" to workout.availableTimeMinutes,
                     "notificationsEnabled" to workout.notificationsEnabled,
                     "remindBeforeMinutes" to workout.remindBeforeMinutes,
                 ),
@@ -137,8 +136,6 @@ class SyncManager(
                         periodDays = (data["periodDays"] as? Number)?.toInt() ?: 30,
                         sleepStart = data["sleepStart"] as? String ?: "22:00",
                         sleepEnd = data["sleepEnd"] as? String ?: "08:00",
-                        availableTimeMinutes = (data["availableTimeMinutes"] as? Number)?.toInt()
-                            ?: WorkoutEntity.DEFAULT_AVAILABLE_TIME_MINUTES,
                         notificationsEnabled = data["notificationsEnabled"] as? Boolean ?: true,
                         remindBeforeMinutes = (data["remindBeforeMinutes"] as? Number)?.toInt()
                             ?: WorkoutEntity.DEFAULT_REMIND_BEFORE_MINUTES,

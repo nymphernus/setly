@@ -2,6 +2,7 @@ package com.nmph.setly.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -28,8 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nmph.setly.R
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
 import com.nmph.setly.ui.theme.IconAccent
@@ -58,12 +62,20 @@ fun EmptyStateView(
                 .background(IconAccent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = Color.White,
-            )
+            if (icon == Icons.Default.FitnessCenter) {
+                Image(
+                    painter = painterResource(R.drawable.ic_dumbbell),
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp),
+                )
+            } else {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = Color.White,
+                )
+            }
         }
         Text(
             title,

@@ -322,11 +322,11 @@ class MainActivity : ComponentActivity() {
                             workout = editingPlan,
                             availableExercises = exercises,
                             initialSettings = initialSettings,
-                            onSave = { name, period, sleepStart, sleepEnd, availableTime,
+                            onSave = { name, period, sleepStart, sleepEnd,
                                 notifications, remindBefore, settings ->
                                 workoutVM.saveWorkout(
                                     id, name, period, sleepStart, sleepEnd,
-                                    availableTime, notifications, remindBefore, settings,
+                                    notifications, remindBefore, settings,
                                 ) { message ->
                                     snackbarMessage = message
                                     navController.popBackStack()
@@ -383,6 +383,10 @@ class MainActivity : ComponentActivity() {
                         DayDetailScreen(
                             date = date,
                             viewModel = dayVM,
+                            workouts = workouts,
+                            onFillDay = { plan ->
+                                dayVM.fillDay(plan) { message -> snackbarMessage = message }
+                            },
                             onBack = { navController.popBackStack() },
                         )
                     }

@@ -31,6 +31,8 @@ import java.time.format.DateTimeFormatter
 data class TodayExerciseItem(
     val exercise: ExerciseEntity,
     val dailyTargetReps: Int,
+    /** Норма на сегодня с учётом долгов за предыдущие 7 дней. */
+    val adjustedTargetReps: Int,
     val repsPerSet: Int,
     val sets: List<Int>,
     /** Индексы отмеченных подходов (не значения повторений!). */
@@ -69,27 +71,36 @@ class TodayViewModel(
     private val progress: StateFlow<List<ProgressEntity>> = progressDao.getProgressForDate(todayDate)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val allProgress: StateFlow<List<ProgressEntity>> = progressDao.observeAllProgress()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val todayWorkouts: StateFlow<List<TodayWorkoutItem>> = combine(
         workouts,
         plannedExercises,
         progress,
+        allProgress,
     ) { workoutEntities: List<WorkoutEntity>,
         rows: List<PlannedExerciseRow>,
-        progressList: List<ProgressEntity> ->
+        todayProgressList: List<ProgressEntity>,
+        allProgressList: List<ProgressEntity> ->
         workoutEntities.withPlans(rows)
             .filter { isActiveOn(it.workout, today) }
             .map { plan ->
                 TodayWorkoutItem(
                     workout = plan.workout,
                     exercises = plan.exercises.map { planned ->
-                        val sets = DistributionHelper.setsForPlan(planned, plan.workout)
-                        val saved = progressList
+                        val adjustedTarget = DistributionHelper.calculateAdjustedTarget(
+                            planned, today, allProgressList, plan.workout,
+                        )
+                        val sets = DistributionHelper.setsForAdjustedTarget(planned, adjustedTarget)
+                        val saved = todayProgressList
                             .firstOrNull { it.exerciseId == planned.exercise.id }
                             ?.completedSets
                             .orEmpty()
                         TodayExerciseItem(
                             exercise = planned.exercise,
                             dailyTargetReps = planned.dailyTargetReps,
+                            adjustedTargetReps = adjustedTarget,
                             repsPerSet = planned.repsPerSet,
                             sets = sets,
                             completedIndexes = saved.filter { it in sets.indices }.distinct(),
@@ -127,20 +138,67 @@ class TodayViewModel(
         )
         viewModelScope.launch {
             progressDao.insertOrUpdate(updatedProgress)
-            AchievementChecker.checkAfterProgress(
-                AchievementContext(
-                    achievementDao = achievementDao,
-                    workoutDao = workoutDao,
-                    exerciseDao = exerciseDao,
-                    progressDao = progressDao,
-                ),
-            )
+            checkAchievements()
             if (syncManager.isSignedIn) {
                 withContext(Dispatchers.IO) {
                     runCatching { syncManager.pushProgressToCloud(updatedProgress) }
                 }
             }
         }
+    }
+
+    /**
+     * Переключает сразу все подходы раунда (пары «упражнение → индекс подхода»).
+     * Если все подходы раунда отмечены — снимает отметки, иначе отмечает все.
+     */
+    fun toggleRound(entries: List<Pair<Int, Int>>) {
+        val items = todayWorkouts.value.flatMap { it.exercises }.associateBy { it.exercise.id }
+        val valid = entries.filter { (exerciseId, index) ->
+            items[exerciseId]?.sets?.indices?.contains(index) == true
+        }
+        if (valid.isEmpty()) return
+        val allChecked = valid.all { (exerciseId, index) ->
+            index in items.getValue(exerciseId).completedIndexes
+        }
+        val shouldCheck = !allChecked
+        val updates = valid.groupBy({ it.first }, { it.second }).mapNotNull { (exerciseId, indexes) ->
+            val item = items[exerciseId] ?: return@mapNotNull null
+            val updated = if (shouldCheck) {
+                item.completedIndexes.toSet() + indexes
+            } else {
+                item.completedIndexes.toSet() - indexes.toSet()
+            }
+            ProgressEntity(
+                id = "${todayDate}_$exerciseId",
+                date = todayDate,
+                exerciseId = exerciseId,
+                completedSets = updated.sorted(),
+                isCompleted = updated.size == item.sets.size,
+            )
+        }
+        if (updates.isEmpty()) return
+        viewModelScope.launch {
+            updates.forEach { updatedProgress ->
+                progressDao.insertOrUpdate(updatedProgress)
+                if (syncManager.isSignedIn) {
+                    withContext(Dispatchers.IO) {
+                        runCatching { syncManager.pushProgressToCloud(updatedProgress) }
+                    }
+                }
+            }
+            checkAchievements()
+        }
+    }
+
+    private suspend fun checkAchievements() {
+        AchievementChecker.checkAfterProgress(
+            AchievementContext(
+                achievementDao = achievementDao,
+                workoutDao = workoutDao,
+                exerciseDao = exerciseDao,
+                progressDao = progressDao,
+            ),
+        )
     }
 
     fun isWorkoutComplete(workoutId: Int): Boolean =

@@ -70,6 +70,21 @@ class WorkoutDetailViewModel(
             WorkoutTotals(byExercise)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorkoutTotals())
+
+    /** Нормы на сегодня с учётом долгов — используются в подсказках карточек упражнений. */
+    val adjustedTargets: StateFlow<Map<Int, Int>> = combine(
+        workoutDao.getAllWorkouts(),
+        workoutDao.observePlannedExercises(),
+        progressDao.observeAllProgress(),
+    ) { workoutEntities, rows, progress ->
+        val plan = workoutEntities.withPlans(rows).firstOrNull { it.workout.id == workoutId }
+            ?: return@combine emptyMap()
+        plan.exercises.associate { planned ->
+            planned.exercise.id to DistributionHelper.calculateAdjustedTarget(
+                planned, LocalDate.now(), progress, plan.workout,
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 }
 
 class WorkoutDetailViewModelFactory(

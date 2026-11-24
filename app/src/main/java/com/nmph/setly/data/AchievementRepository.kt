@@ -2,7 +2,17 @@ package com.nmph.setly.data
 
 import com.nmph.setly.data.local.AchievementEntity
 
-/** Справочник из 50 трофеев. Эмодзи используется как «картинка» трофея. */
+/** Категория трофея: определяет цвет фона и иконку по умолчанию. */
+enum class TrophyCategory(val iconResName: String, val colorHex: Long) {
+    STRENGTH("ic_dumbbell", 0xFFE57373),
+    DISCIPLINE("ic_calendar", 0xFF64B5F6),
+    PROGRESS("ic_chart", 0xFF81C784),
+    TIME("ic_clock", 0xFFFFB74D),
+    CLOUD("ic_cloud", 0xFF4DD0E1),
+    MASTERY("ic_star", 0xFFBA68C8),
+}
+
+/** Справочник из 50 трофеев. Эмодзи остаётся запасным вариантом, если иконка не найдена. */
 object AchievementRepository {
     val allAchievements: List<AchievementEntity> = listOf(
         AchievementEntity("first_workout", "Первый шаг", "Создайте первую тренировку", "🌱"),
@@ -60,4 +70,46 @@ object AchievementRepository {
     fun byId(id: String): AchievementEntity? = allAchievements.firstOrNull { it.id == id }
 
     val size: Int get() = allAchievements.size
+
+    /** Категория нужна для цветного фона карточки трофея. */
+    fun categoryFor(id: String): TrophyCategory = when (id) {
+        "first_workout", "first_set", "first_finish", "novice", "organizer", "worker",
+        "athlete", "heavy", "titan", "pushup_king", "squat_master", "iron_abs",
+        "steel_grip", "one_day_500", "sprinter", "endurance", "first_gym", "legend"
+        -> TrophyCategory.STRENGTH
+
+        "first_day", "streak_2", "streak_3", "streak_7", "streak_14", "streak_30",
+        "streak_100", "return", "marathon", "no_skip", "perfectionist", "planner",
+        "long_term", "circles"
+        -> TrophyCategory.DISCIPLINE
+
+        "early_bird", "night_owl", "night_warrior", "patient", "perfect_timing",
+        "auto_rest", "sleep_setup", "adapt"
+        -> TrophyCategory.TIME
+
+        "sync", "cloud", "notified"
+        -> TrophyCategory.CLOUD
+
+        "dynamic", "expert", "collector", "calendar", "editor", "triathlon",
+        "collector_2"
+        -> TrophyCategory.MASTERY
+
+        else -> TrophyCategory.PROGRESS
+    }
+
+    /** Иконка скачана с Iconify (Material Design Icons); при отсутствии ресурса используется эмодзи. */
+    fun iconResName(id: String): String = when (id) {
+        "first_set", "no_skip", "perfectionist" -> "ic_check_circle"
+        "first_day", "planner", "long_term", "calendar" -> "ic_calendar"
+        "streak_2", "streak_3", "streak_7", "streak_14", "streak_30", "streak_100" -> "ic_fire"
+        "marathon", "sprinter" -> "ic_run"
+        "night_owl", "sleep_setup", "early_bird" -> "ic_sleep"
+        "sync", "cloud", "return" -> "ic_cloud"
+        "notified" -> "ic_bell"
+        "legend", "collector_2", "collector" -> "ic_trophy"
+        "expert" -> "ic_account"
+        "dynamic", "athlete", "worker" -> "ic_chart"
+        "lock" -> "ic_lock"
+        else -> categoryFor(id).iconResName
+    }
 }

@@ -8,6 +8,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -29,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +77,7 @@ fun WorkoutDetailScreen(
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
     val totals by detailViewModel.totals.collectAsStateWithLifecycle()
+    val adjustedTargets by detailViewModel.adjustedTargets.collectAsStateWithLifecycle()
     val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
     val todayExercises = todayItem?.exercises?.associateBy { it.exercise.id }.orEmpty()
 
@@ -94,6 +97,34 @@ fun WorkoutDetailScreen(
         DistributionHelper.restMinutes(workout.workout.sleepStart, workout.workout.sleepEnd, totalSets)
     }
     val totalSeconds = restMinutes * 60
+
+    // Комплексные повторы: каждый круг объединяет по одному подходу каждого упражнения.
+    val rounds = workout?.exercises?.map { planned ->
+        val todayExercise = todayExercises[planned.exercise.id]
+        val sets = todayExercise?.sets
+            ?: DistributionHelper.setsForAdjustedTarget(
+                planned,
+                adjustedTargets[planned.exercise.id] ?: planned.dailyTargetReps,
+            )
+        Triple(planned, sets, todayExercise?.completedIndexes.orEmpty())
+    }?.let { views ->
+        (0 until (views.maxOfOrNull { it.second.size } ?: 0)).map { index ->
+            Round(
+                number = index + 1,
+                sets = views.mapNotNull { (planned, sets, done) ->
+                    sets.getOrNull(index)?.let { reps ->
+                        RoundSet(
+                            exerciseId = planned.exercise.id,
+                            name = planned.exercise.name,
+                            reps = reps,
+                            index = index,
+                            checked = index in done,
+                        )
+                    }
+                },
+            )
+        }
+    }.orEmpty()
 
     LaunchedEffect(timerRun, totalSeconds) {
         if (timerRun == 0 || totalSeconds <= 0) return@LaunchedEffect
@@ -256,13 +287,18 @@ fun WorkoutDetailScreen(
                         onAction = onEdit,
                     )
                 }
-            } else {
+            } else if (workout.exercises.size == 1) {
                 items(workout.exercises, key = { it.exercise.id }) { planned ->
                     val todayExercise = todayExercises[planned.exercise.id]
-                    val plannedSets = DistributionHelper.setsForPlan(planned, workout.workout)
+                    val plannedSets = DistributionHelper.setsForAdjustedTarget(
+                        planned,
+                        adjustedTargets[planned.exercise.id] ?: planned.dailyTargetReps,
+                    )
                     ExerciseSetsCard(
                         name = planned.exercise.name,
-                        dailyTargetReps = planned.dailyTargetReps,
+                        dailyTargetReps = todayExercise?.adjustedTargetReps
+                            ?: planned.dailyTargetReps,
+                        baseTargetReps = planned.dailyTargetReps,
                         repsPerSet = plannedSets.firstOrNull() ?: planned.repsPerSet,
                         sets = todayExercise?.sets ?: plannedSets,
                         completedIndexes = todayExercise?.completedIndexes.orEmpty(),
@@ -270,20 +306,51 @@ fun WorkoutDetailScreen(
                         total = totals.byExercise[planned.exercise.id],
                         onSetClick = { index, wasChecked ->
                             todayViewModel.toggleSet(planned.exercise.id, index)
-                            when {
-                                wasChecked -> {
-                                    timerRun = 0
-                                    timeLeft = 0
-                                }
+                            if (wasChecked ||
                                 (todayExercise?.completedSetsCount ?: 0) + 1 >=
-                                    (todayExercise?.sets?.size ?: 0) -> {
-                                    timerRun = 0
-                                    timeLeft = 0
-                                }
-                                else -> {
-                                    timeLeft = totalSeconds
-                                    timerRun++
-                                }
+                                (todayExercise?.sets?.size ?: 0)
+                            ) {
+                                timerRun = 0
+                                timeLeft = 0
+                            } else {
+                                timeLeft = totalSeconds
+                                timerRun++
+                            }
+                        },
+                    )
+                }
+            } else {
+                item {
+                    Text(
+                        "Комплексные повторы: ${rounds.size} кругов по ${workout.exercises.size} " +
+                            "упражнений. Отметьте круг целиком или отдельные подходы.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                items(rounds, key = { it.number }) { round ->
+                    RoundCard(
+                        round = round,
+                        onRoundClick = {
+                            todayViewModel.toggleRound(round.sets.map { it.exerciseId to it.index })
+                            if (round.isDone) {
+                                // Снимаем отметки — отдых не нужен.
+                                timerRun = 0
+                                timeLeft = 0
+                            } else {
+                                // Круг завершён — запускаем отдых перед следующим.
+                                timeLeft = totalSeconds
+                                timerRun++
+                            }
+                        },
+                        onSetClick = { item, wasChecked ->
+                            todayViewModel.toggleSet(item.exerciseId, item.index)
+                            if (wasChecked) {
+                                timerRun = 0
+                                timeLeft = 0
+                            } else {
+                                timeLeft = totalSeconds
+                                timerRun++
                             }
                         },
                     )
@@ -298,6 +365,7 @@ fun WorkoutDetailScreen(
 private fun ExerciseSetsCard(
     name: String,
     dailyTargetReps: Int,
+    baseTargetReps: Int,
     repsPerSet: Int,
     sets: List<Int>,
     completedIndexes: List<Int>,
@@ -342,12 +410,12 @@ private fun ExerciseSetsCard(
                 color = MaterialTheme.colorScheme.tertiary,
             )
             Text(
-                "На сегодня: $dailyTargetReps раз → ${sets.size} подходов по $repsPerSet раз (с учетом времени)",
+                "На сегодня: $dailyTargetReps раз → ${sets.size} подходов по $repsPerSet раз (с учётом долгов)",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Всего за период: ${dailyTargetReps * periodDays} раз ($periodDays дней × $dailyTargetReps)",
+                "Всего за период: ${baseTargetReps * periodDays} раз ($periodDays дней × $baseTargetReps)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -388,6 +456,89 @@ private fun ExerciseSetsCard(
                             onClick = { onSetClick(index, isChecked) },
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Один подход упражнения внутри круга. */
+private data class RoundSet(
+    val exerciseId: Int,
+    val name: String,
+    val reps: Int?,
+    val index: Int,
+    val checked: Boolean,
+)
+
+/** Круг: набор подходов, которые выполняются вместе. */
+private data class Round(
+    val number: Int,
+    val sets: List<RoundSet>,
+) {
+    val isDone: Boolean get() = sets.isNotEmpty() && sets.all { it.checked }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RoundCard(
+    round: Round,
+    onRoundClick: () -> Unit,
+    onSetClick: (RoundSet, Boolean) -> Unit,
+) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (round.isDone) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(250),
+        label = "roundBackground",
+    )
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        shape = AppCards.Shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = AppCards.Elevation),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(AppSpacing.Block),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRoundClick),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = round.isDone, onCheckedChange = { onRoundClick() })
+                Text(
+                    "Круг ${round.number}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "${round.sets.count { it.checked }}/${round.sets.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+            ) {
+                round.sets.forEach { item ->
+                    SetPill(
+                        reps = item.reps ?: 0,
+                        checked = item.checked,
+                        compact = true,
+                        onClick = { onSetClick(item, item.checked) },
+                    )
                 }
             }
         }
