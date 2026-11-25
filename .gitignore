@@ -25,6 +25,7 @@ output-metadata.json
 
 # Firebase / локальные ключи проекта
 google-services.json
+app/google-services.json
 
 # OS files
 Thumbs.db

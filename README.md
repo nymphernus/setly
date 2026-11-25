@@ -23,7 +23,9 @@
 - Android SDK: API **37**, Build Tools **36.0.0**. Минимальная версия Android — **10 (API 29)**.
 - Аккаунт Firebase — только если нужна синхронизация. Для сборки конфиг Firebase всё равно нужен (плагин Google Services проверяет его на этапе сборки).
 
-## Клонирование
+## Установка
+
+### Клонирование
 
 ```bash
 git clone <URL-репозитория> Setly
@@ -32,13 +34,15 @@ cd Setly
 
 Откройте папку в Android Studio и дождитесь синхронизации Gradle. Оболочка Gradle уже лежит в репозитории — отдельно ставить Gradle не нужно.
 
-## Настройка Firebase
+### Настройка Firebase
+
+**Проект не содержит `google-services.json` по соображениям безопасности.** Без него сборка не пройдёт: плагин Google Services проверяет конфиг на этапе сборки.
 
 1. Создайте проект в [Firebase Console](https://console.firebase.google.com/).
 2. Добавьте Android-приложение с package name `com.nmph.setly`.
-3. Скачайте `google-services.json` и положите его в папку `app/`.
+3. Скачайте `google-services.json` и положите его в папку `app/` (итоговый путь — `app/google-services.json`). Это обязательный шаг для локальной сборки.
 4. Включите **Authentication → Sign-in method → Google** и создайте **Cloud Firestore**.
-5. Добавьте SHA-1 отпечаток вашего ключа в настройках Android-приложения Firebase. Для debug-ключа:
+5. Добавьте SHA-1 отпечаток вашего ключа в настройках Android-приложения Firebase. Быстрый способ получить отпечаток — `./gradlew signingReport` (в Windows: `.\\gradlew signingReport`) и взять значение `SHA1` для нужного варианта `debug` или `release`. Для debug-ключа также подойдёт:
 
    **Windows (PowerShell):**
    ```powershell
