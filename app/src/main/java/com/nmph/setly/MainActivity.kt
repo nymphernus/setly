@@ -39,7 +39,6 @@ import com.nmph.setly.ui.DayDetailScreen
 import com.nmph.setly.ui.MainScreen
 import com.nmph.setly.ui.SplashScreen
 import com.nmph.setly.ui.WorkoutDetailScreen
-import com.nmph.setly.ui.WorkoutScheduleScreen
 import com.nmph.setly.ui.theme.SetlyTheme
 import com.nmph.setly.utils.AchievementChecker
 import com.nmph.setly.utils.AchievementEvents
@@ -304,33 +303,10 @@ class MainActivity : ComponentActivity() {
                             detailViewModel = detailVM,
                             onBack = { navController.popBackStack() },
                             onEdit = { navController.navigate("edit_workout/$id") },
-                            onSchedule = { navController.navigate("schedule/$id") },
                             onComplete = {
                                 snackbarMessage = "Тренировка завершена"
                                 navController.popBackStack()
                             },
-                        )
-                    }
-                    composable(
-                        route = "schedule/{workoutId}",
-                        arguments = listOf(navArgument("workoutId") {
-                            type = NavType.IntType
-                            defaultValue = -1
-                        }),
-                    ) { entry ->
-                        val id = entry.arguments?.getInt("workoutId") ?: -1
-                        val selectedWorkout: WorkoutPlan? = workouts.firstOrNull { it.workout.id == id }
-                        val detailVM: WorkoutDetailViewModel = viewModel(
-                            key = "schedule_$id",
-                            factory = WorkoutDetailViewModelFactory(
-                                id, database.workoutDao(), database.progressDao(),
-                            ),
-                        )
-                        WorkoutScheduleScreen(
-                            workout = selectedWorkout,
-                            todayViewModel = todayVM,
-                            detailViewModel = detailVM,
-                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(
