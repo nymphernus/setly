@@ -78,6 +78,7 @@ class WorkoutViewModel(
                 id = existing?.id ?: 0,
                 name = name,
                 startDate = existing?.startDate ?: System.currentTimeMillis(),
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                 periodDays = periodDays,
                 sleepStart = sleepStart,
                 sleepEnd = sleepEnd,

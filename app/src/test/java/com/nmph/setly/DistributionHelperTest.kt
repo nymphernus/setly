@@ -17,14 +17,22 @@ class DistributionHelperTest {
         repsPerSet = repsPerSet,
     )
 
-    private fun workout(startDate: LocalDate = LocalDate.of(2026, 11, 1), periodDays: Int = 30) =
-        WorkoutEntity(
-            name = "Тест",
-            startDate = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-            periodDays = periodDays,
-            sleepStart = "22:00",
-            sleepEnd = "08:00",
-        )
+    private fun millis(date: LocalDate, hour: Int, minute: Int = 0) =
+        date.atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    private fun workout(
+        startDate: LocalDate = LocalDate.of(2026, 11, 1),
+        periodDays: Int = 30,
+        createdAt: Long? = null,
+    ) = WorkoutEntity(
+        name = "Тест",
+        startDate = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+        createdAt = createdAt
+            ?: startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+        periodDays = periodDays,
+        sleepStart = "22:00",
+        sleepEnd = "08:00",
+    )
 
     @Test
     fun `sleep across midnight is measured correctly`() {
@@ -80,6 +88,45 @@ class DistributionHelperTest {
         assertEquals(4, windows.count { it.durationMinutes == 77 })
         assertEquals(7, windows.count { it.durationMinutes == 76 })
         assertEquals(840, windows.sumOf { it.durationMinutes })
+    }
+
+    @Test
+    fun `dynamic rest starts at full awake window for workout created today`() {
+        val today = LocalDate.of(2026, 11, 25)
+        val createdAt = millis(today, 8)
+        val plan = workout(startDate = today, createdAt = createdAt)
+        assertEquals(84, DistributionHelper.calculateDynamicRest(plan, 10, 0, createdAt))
+    }
+
+    @Test
+    fun `dynamic rest is recalculated after quick marks and when time is late`() {
+        val today = LocalDate.of(2026, 11, 25)
+        val createdAt = millis(today, 8)
+        val plan = workout(startDate = today, createdAt = createdAt)
+
+        // Два подхода подряд в 09:00: оставшиеся 780 минут делятся на 8 подходов.
+        assertEquals(97, DistributionHelper.calculateDynamicRest(plan, 10, 2, millis(today, 9)))
+        // К 12:00 остаётся меньше времени, поэтому интервал сокращается.
+        assertEquals(75, DistributionHelper.calculateDynamicRest(plan, 10, 2, millis(today, 12)))
+    }
+
+    @Test
+    fun `older workout uses eight o'clock anchor and overdue sets are detected`() {
+        val today = LocalDate.of(2026, 11, 25)
+        val plan = workout(startDate = today.minusDays(1), createdAt = millis(today.minusDays(1), 9))
+        val now = millis(today, 20)
+        val schedule = DistributionHelper.calculateDynamicSchedule(plan, 10, 0, now)
+
+        assertEquals(12, schedule.restMinutes)
+        assertEquals(true, DistributionHelper.isSetOverdue(schedule, 0, false, now))
+        assertEquals(false, DistributionHelper.isSetOverdue(schedule, 0, true, now))
+    }
+
+    @Test
+    fun `dynamic rest is never shorter than one minute`() {
+        val today = LocalDate.of(2026, 11, 25)
+        val plan = workout(startDate = today, createdAt = millis(today, 8))
+        assertEquals(1, DistributionHelper.calculateDynamicRest(plan, 10, 0, millis(today, 21, 55)))
     }
 
     @Test

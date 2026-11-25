@@ -106,16 +106,23 @@ fun SetPill(
     checked: Boolean,
     onClick: () -> Unit,
     compact: Boolean = false,
+    overdue: Boolean = false,
 ) {
     val background by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.secondary
-        else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = when {
+            checked -> MaterialTheme.colorScheme.secondary
+            overdue -> MaterialTheme.colorScheme.errorContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        },
         animationSpec = tween(200),
         label = "setPillBackground",
     )
     val contentColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.onSecondary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = when {
+            checked -> MaterialTheme.colorScheme.onSecondary
+            overdue -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        },
         animationSpec = tween(200),
         label = "setPillContent",
     )
@@ -124,9 +131,12 @@ fun SetPill(
             .clip(RoundedCornerShape(50))
             .background(background)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(
+                horizontal = if (compact) 10.dp else 14.dp,
+                vertical = if (compact) 6.dp else 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
     ) {
         Box(
             modifier = Modifier
@@ -147,7 +157,8 @@ fun SetPill(
         }
         Text(
             if (compact) reps.toString() else "$reps раз",
-            style = MaterialTheme.typography.labelLarge,
+            style = if (compact) MaterialTheme.typography.labelMedium
+            else MaterialTheme.typography.labelLarge,
             color = contentColor,
         )
     }

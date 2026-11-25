@@ -10,6 +10,8 @@ data class WorkoutEntity(
     val id: Int = 0,
     val name: String,
     val startDate: Long,
+    /** Момент создания тренировки: якорь для динамического расписания в день создания. */
+    val createdAt: Long = 0L,
     val periodDays: Int,
     val sleepStart: String, // "HH:mm"
     val sleepEnd: String, // "HH:mm"

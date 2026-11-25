@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,7 +34,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,11 +53,12 @@ import com.nmph.setly.ui.components.WorkoutClock
 import com.nmph.setly.ui.components.clockColor
 import com.nmph.setly.ui.theme.AppCards
 import com.nmph.setly.ui.theme.AppSpacing
-import com.nmph.setly.ui.viewmodel.ExerciseTotal
+import com.nmph.setly.ui.viewmodel.TodayExerciseItem
 import com.nmph.setly.ui.viewmodel.TodayViewModel
 import com.nmph.setly.ui.viewmodel.WorkoutDetailViewModel
 import com.nmph.setly.utils.DistributionHelper
-import com.nmph.setly.utils.TimeWindow
+import com.nmph.setly.utils.DynamicSchedule
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,11 +68,11 @@ fun WorkoutDetailScreen(
     detailViewModel: WorkoutDetailViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
+    onSchedule: () -> Unit,
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
-    val totals by detailViewModel.totals.collectAsStateWithLifecycle()
     val adjustedTargets by detailViewModel.adjustedTargets.collectAsStateWithLifecycle()
     val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
     val todayExercises = todayItem?.exercises?.associateBy { it.exercise.id }.orEmpty()
@@ -78,37 +84,38 @@ fun WorkoutDetailScreen(
     val doneReps = todayItem?.exercises?.sumOf { it.completedToday } ?: 0
     val remainingReps = (targetReps - doneReps).coerceAtLeast(0)
 
-    val sleepStart = workout?.workout?.sleepStart ?: "23:00"
-    val sleepEnd = workout?.workout?.sleepEnd ?: "07:00"
+    // Тик нужен, чтобы таймер и просроченные подходы обновлялись без действия пользователя.
+    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            currentTime = System.currentTimeMillis()
+        }
+    }
 
-    // Каждое упражнение живёт своей жизнью: свои подходы, свои окна, свои долги.
-    val exerciseViews = workout?.exercises?.mapIndexed { index, planned ->
-        val todayExercise = todayExercises[planned.exercise.id]
-        val target = adjustedTargets[planned.exercise.id] ?: planned.dailyTargetReps
-        val sets = todayExercise?.sets
-            ?: DistributionHelper.setsForAdjustedTarget(planned, target)
-        val dailyTarget = todayExercise?.adjustedTargetReps ?: target
-        val windows = DistributionHelper.calculateWindowsForExercise(sleepStart, sleepEnd, sets.size)
-        ExerciseView(
-            index = index,
-            exercise = planned.exercise,
-            dailyTargetReps = dailyTarget,
-            baseTargetReps = planned.dailyTargetReps,
-            sets = sets,
-            windows = windows,
-            completedIndexes = todayExercise?.completedIndexes.orEmpty(),
-            periodDays = workout.workout.periodDays,
-            total = totals.byExercise[planned.exercise.id],
-        )
-    }.orEmpty()
-
-    val clockSections = exerciseViews.map { view ->
-        ClockSection(
-            exerciseId = view.exercise.id,
-            label = view.exercise.name,
-            color = clockColor(view.index),
-            windows = view.windows,
-        )
+    val exerciseViews = workout
+        ?.let { buildExerciseViews(it, todayExercises, adjustedTargets) }
+        .orEmpty()
+    val schedules = if (workout != null) {
+        exerciseViews.associate { view ->
+            view.exercise.id to DistributionHelper.calculateDynamicSchedule(
+                workout.workout, view.sets.size, view.completedIndexes.size, currentTime,
+            )
+        }
+    } else {
+        emptyMap()
+    }
+    val nextSet = exerciseViews.firstNotNullOfOrNull { view ->
+        val index = view.sets.indices.firstOrNull { it !in view.completedIndexes }
+            ?: return@firstNotNullOfOrNull null
+        val schedule = schedules.getValue(view.exercise.id)
+        if (DistributionHelper.isSetOverdue(schedule, index, false, currentTime)) {
+            "Подход ${index + 1} просрочен" to MaterialTheme.colorScheme.error
+        } else {
+            val minutes = ((schedule.deadlineMillis[index] - currentTime) / 60_000L)
+                .coerceAtLeast(0)
+            "Следующий подход через $minutes мин" to MaterialTheme.colorScheme.tertiary
+        }
     }
 
     Scaffold(
@@ -118,13 +125,13 @@ fun WorkoutDetailScreen(
                 title = {
                     Column {
                         Text(
-                            workout?.workout?.name ?: "Тренировка",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            text = nextSet?.first ?: (workout?.workout?.name ?: "Тренировка"),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = nextSet?.second ?: MaterialTheme.colorScheme.tertiary,
                         )
-                        if (workout != null) {
+                        if (nextSet != null) {
                             Text(
-                                "Период: ${workout.workout.periodDays} дней · Сон: $sleepStart - $sleepEnd",
+                                workout?.workout?.name.orEmpty(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -137,6 +144,9 @@ fun WorkoutDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onSchedule) {
+                        Icon(Icons.Default.Schedule, contentDescription = "Расписание")
+                    }
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Default.Edit, contentDescription = "Редактировать")
                     }
@@ -234,14 +244,6 @@ fun WorkoutDetailScreen(
                 }
             }
 
-            item {
-                WorkoutClock(
-                    sections = clockSections,
-                    sleepStart = sleepStart,
-                    sleepEnd = sleepEnd,
-                )
-            }
-
             if (exerciseViews.isEmpty()) {
                 item {
                     EmptyStateView(
@@ -256,7 +258,10 @@ fun WorkoutDetailScreen(
                 items(exerciseViews, key = { it.exercise.id }) { view ->
                     ExerciseSetsCard(
                         view = view,
+                        schedule = schedules.getValue(view.exercise.id),
+                        currentTime = currentTime,
                         onSetClick = { index ->
+                            currentTime = System.currentTimeMillis()
                             todayViewModel.toggleSet(view.exercise.id, index)
                         },
                     )
@@ -270,18 +275,33 @@ private data class ExerciseView(
     val index: Int,
     val exercise: ExerciseEntity,
     val dailyTargetReps: Int,
-    val baseTargetReps: Int,
     val sets: List<Int>,
-    val windows: List<TimeWindow>,
     val completedIndexes: List<Int>,
-    val periodDays: Int,
-    val total: ExerciseTotal?,
 )
+
+private fun buildExerciseViews(
+    workout: WorkoutPlan,
+    todayExercises: Map<Int, TodayExerciseItem>,
+    adjustedTargets: Map<Int, Int>,
+): List<ExerciseView> = workout.exercises.mapIndexed { index, planned ->
+    val todayExercise = todayExercises[planned.exercise.id]
+    val target = adjustedTargets[planned.exercise.id] ?: planned.dailyTargetReps
+    ExerciseView(
+        index = index,
+        exercise = planned.exercise,
+        dailyTargetReps = todayExercise?.adjustedTargetReps ?: target,
+        sets = todayExercise?.sets
+            ?: DistributionHelper.setsForAdjustedTarget(planned, target),
+        completedIndexes = todayExercise?.completedIndexes.orEmpty(),
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExerciseSetsCard(
     view: ExerciseView,
+    schedule: DynamicSchedule,
+    currentTime: Long,
     onSetClick: (index: Int) -> Unit,
 ) {
     val isDone = view.sets.isNotEmpty() && view.completedIndexes.size == view.sets.size
@@ -294,14 +314,6 @@ private fun ExerciseSetsCard(
         animationSpec = tween(250),
         label = "detailExerciseBackground",
     )
-    val completedReps = view.total?.completedReps ?: 0
-    val possibleReps = view.dailyTargetReps * view.periodDays
-    val percent = if (possibleReps > 0) {
-        ((completedReps * 100) / possibleReps).coerceIn(0, 100)
-    } else {
-        0
-    }
-    val windows = view.windows
 
     Card(
         modifier = Modifier
@@ -324,50 +336,17 @@ private fun ExerciseSetsCard(
             ) {
                 CanvasDot(color = clockColor(view.index))
                 Text(
-                    "${view.exercise.name} (Цель: ${view.dailyTargetReps})",
+                    view.exercise.name,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
             Text(
-                "На сегодня: ${view.dailyTargetReps} ${view.exercise.unit} → " +
-                    "${view.sets.size} подходов (с учётом долгов)",
+                "Цель на сегодня: ${view.dailyTargetReps} ${view.exercise.unit} · " +
+                    "${view.sets.size} подходов · ${schedule.restMinutes} мин на подход",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                if (windows.isEmpty()) {
-                    "Временные окна не распределены"
-                } else {
-                    "Окна: ${windows.first().label} – ${windows.last().endLabel} · " +
-                        "${windows.first().durationMinutes} мин на подход"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = clockColor(view.index),
-            )
-            Text(
-                "Всего за период: ${view.baseTargetReps * view.periodDays} раз " +
-                    "($view.periodDays дней × ${view.baseTargetReps})",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Выполнено за всё время: $completedReps раз ($percent%)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Text(
-                "Отмечено подходов сегодня: ${view.completedIndexes.size} из ${view.sets.size}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (isDone) {
-                Text(
-                    "Норма на сегодня выполнена",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
             if (view.sets.isEmpty()) {
                 Text(
                     "Нет подходов на сегодня",
@@ -376,16 +355,32 @@ private fun ExerciseSetsCard(
                 )
             } else {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
-                    verticalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     view.sets.forEachIndexed { index, reps ->
-                        SetPill(
-                            reps = reps,
-                            checked = index in view.completedIndexes,
-                            compact = true,
-                            onClick = { onSetClick(index) },
+                        val completed = index in view.completedIndexes
+                        val overdue = DistributionHelper.isSetOverdue(
+                            schedule, index, completed, currentTime,
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SetPill(
+                                reps = reps,
+                                checked = completed,
+                                overdue = overdue,
+                                compact = true,
+                                onClick = { onSetClick(index) },
+                            )
+                            Text(
+                                "${schedule.restMinutes} мин",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (overdue) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -397,5 +392,76 @@ private fun ExerciseSetsCard(
 private fun CanvasDot(color: Color) {
     androidx.compose.foundation.Canvas(modifier = Modifier.size(12.dp)) {
         drawCircle(color = color)
+    }
+}
+
+/** Отдельный экран с часами: в деталях тренировки они больше не занимают место. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WorkoutScheduleScreen(
+    workout: WorkoutPlan?,
+    todayViewModel: TodayViewModel,
+    detailViewModel: WorkoutDetailViewModel,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val todayWorkouts by todayViewModel.todayWorkouts.collectAsStateWithLifecycle()
+    val adjustedTargets by detailViewModel.adjustedTargets.collectAsStateWithLifecycle()
+    val todayItem = todayWorkouts.firstOrNull { it.workout.id == workout?.workout?.id }
+    val todayExercises = todayItem?.exercises?.associateBy { it.exercise.id }.orEmpty()
+    val exerciseViews = workout
+        ?.let { buildExerciseViews(it, todayExercises, adjustedTargets) }
+        .orEmpty()
+
+    val sleepStart = workout?.workout?.sleepStart ?: "23:00"
+    val sleepEnd = workout?.workout?.sleepEnd ?: "07:00"
+    val clockSections = exerciseViews.map { view ->
+        ClockSection(
+            exerciseId = view.exercise.id,
+            label = view.exercise.name,
+            color = clockColor(view.index),
+            windows = DistributionHelper.calculateWindowsForExercise(
+                sleepStart, sleepEnd, view.sets.size,
+            ),
+        )
+    }
+
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text("Расписание") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.Block),
+            contentPadding = PaddingValues(AppSpacing.Block),
+        ) {
+            item {
+                WorkoutClock(
+                    sections = clockSections,
+                    sleepStart = sleepStart,
+                    sleepEnd = sleepEnd,
+                )
+            }
+            items(clockSections, key = { it.exerciseId }) { section ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.CardInner),
+                ) {
+                    CanvasDot(color = section.color)
+                    Text(section.label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }

@@ -27,6 +27,16 @@ data class TimeWindow(
     val label: String get() = "$startLabel–$endLabel"
 }
 
+/** Расписание подходов, пересчитанное под текущий момент и уже отмеченные подходы. */
+data class DynamicSchedule(
+    /** Минут между подходами после пересчёта. */
+    val restMinutes: Int,
+    /** Предельное время каждого подхода в миллисекундах. */
+    val deadlineMillis: List<Long>,
+    /** Сколько времени осталось до конца бодрствования. */
+    val remainingMinutes: Int,
+)
+
 /**
  * Единый источник истины для расчёта подходов, временных окон и долгов.
  *
@@ -39,6 +49,9 @@ object DistributionHelper {
     const val DEFAULT_REPS_PER_SET = 20
     const val DEBT_WINDOW_DAYS = 7
     const val MINUTES_PER_DAY = 24 * 60
+    /** Начало дня, используемое для тренировок, созданных в предыдущие дни. */
+    const val DEFAULT_START_MINUTE = 8 * 60
+    private const val MILLIS_PER_MINUTE = 60_000L
 
     /** Время «HH:mm» в минутах от полуночи (0..1439). */
     fun minutesOfDay(value: String): Int {
@@ -123,6 +136,81 @@ object DistributionHelper {
             }
             TimeWindow(start, end)
         }
+    }
+
+    /**
+     * Динамическое расписание: оставшееся время дня делится на ещё не отмеченные подходы.
+     * Для тренировки, созданной сегодня, отсчёт идёт от [WorkoutEntity.createdAt],
+     * для старых — от 08:00. При опоздании или быстрых отметках интервал пересчитывается.
+     */
+    fun calculateDynamicSchedule(
+        workout: WorkoutEntity,
+        totalSets: Int,
+        completedSets: Int,
+        currentTime: Long,
+    ): DynamicSchedule {
+        if (totalSets <= 0) return DynamicSchedule(1, emptyList(), 0)
+
+        val zone = ZoneId.systemDefault()
+        val now = Instant.ofEpochMilli(currentTime).atZone(zone)
+        val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        val createdToday = workout.createdAt > 0 &&
+            Instant.ofEpochMilli(workout.createdAt).atZone(zone).toLocalDate() == now.toLocalDate()
+        val startMinute = if (createdToday) {
+            val createdMinute = Instant.ofEpochMilli(workout.createdAt)
+                .atZone(zone).let { it.hour * 60 + it.minute }
+            maxOf(DEFAULT_START_MINUTE, createdMinute)
+        } else {
+            DEFAULT_START_MINUTE
+        }
+        val startMillis = dayStart + startMinute * MILLIS_PER_MINUTE
+        val endMinute = awakeEndMinute(workout, startMinute)
+        val endMillis = dayStart + endMinute * MILLIS_PER_MINUTE
+
+        // До начала окна времени столько же, сколько в момент пробуждения.
+        val effectiveNow = maxOf(currentTime, startMillis)
+        val availableMillis = (endMillis - effectiveNow).coerceAtLeast(0)
+        val remainingSets = (totalSets - completedSets).coerceAtLeast(1)
+        val restMinutes = (availableMillis / MILLIS_PER_MINUTE / remainingSets)
+            .toInt().coerceAtLeast(1)
+        val deadlineMillis = (0 until totalSets).map { index ->
+            minOf(startMillis + (index + 1L) * restMinutes * MILLIS_PER_MINUTE, endMillis)
+        }
+        return DynamicSchedule(
+            restMinutes = restMinutes,
+            deadlineMillis = deadlineMillis,
+            remainingMinutes = (availableMillis / MILLIS_PER_MINUTE).toInt(),
+        )
+    }
+
+    /** Интервал между подходами с учётом созданной сегодня тренировки и опозданий. */
+    fun calculateDynamicRest(
+        workout: WorkoutEntity,
+        totalSets: Int,
+        completedSets: Int,
+        currentTime: Long,
+    ): Int = calculateDynamicSchedule(workout, totalSets, completedSets, currentTime).restMinutes
+
+    /** Подход просрочен, если его время прошло, а отметки нет. */
+    fun isSetOverdue(
+        schedule: DynamicSchedule,
+        setIndex: Int,
+        completed: Boolean,
+        currentTime: Long,
+    ): Boolean {
+        if (completed) return false
+        val deadline = schedule.deadlineMillis.getOrNull(setIndex) ?: return false
+        return currentTime > deadline
+    }
+
+    private fun awakeEndMinute(workout: WorkoutEntity, startMinute: Int): Int {
+        val sleepStartMinute = minutesOfDay(workout.sleepStart)
+        val anchoredSleep = if (sleepStartMinute > startMinute) {
+            sleepStartMinute
+        } else {
+            sleepStartMinute + MINUTES_PER_DAY
+        }
+        return minOf(startMinute + awakeMinutes(workout.sleepStart, workout.sleepEnd), anchoredSleep)
     }
 
     /**
