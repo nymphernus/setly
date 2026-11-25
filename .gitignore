@@ -1,33 +1,30 @@
-# Gradle
-.gradle/
-build/
-
-# Local configuration
-local.properties
-
-# Android Studio / IntelliJ
-.idea/
+# Android
 *.iml
-captures/
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
 .externalNativeBuild/
 .cxx/
 
-# Outputs
-*.apk
-*.aab
-output-metadata.json
-
-# Keystore (НИКОГДА не коммитить)
+# Keystore (СЕКРЕТНО)
 *.jks
 *.keystore
 key.properties
 
-# Firebase / Google Services (содержит конфигурацию проекта)
-google-services.json
-
-# Logs
+# Логи
 *.log
 
+# Не коммитить релизные сборки
+/app/build/
+*.apk
+*.aab
+output-metadata.json
+
+# Firebase / локальные ключи проекта
+google-services.json
+
 # OS files
-.DS_Store
 Thumbs.db
